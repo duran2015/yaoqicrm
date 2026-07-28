@@ -1,7 +1,7 @@
 # pharma-crm-mcp-server
 
 药企销售代表 CRM 的 **MCP(Model Context Protocol)Server**。它把 CRM 的 REST API
-(`http://localhost:5618/api/...`,契约见项目根目录 `API.md`)封装为 25 个 AI 友好的原子工具,
+(`http://localhost:5618/api/...`,契约见项目根目录 `API.md`)封装为原子工具和 3 个演示复合工具，
 让外部 AI 可以搜索医生、记录拜访(含签到)、评定拜访有效性、查询库存、提交周计划、
 读取 KPI 与辖区绩效、汇总员工拜访情况。
 
@@ -46,25 +46,28 @@ stdio 模式下进程在 stdio 上等待 MCP 客户端连接,日志输出到 std
 | 环境变量 | `MCP_TRANSPORT` | 设为 `http` 等效于 `--http` 参数 | stdio |
 | 环境变量 | `MCP_PORT` | HTTP 模式监听端口 | `5620` |
 | 环境变量 | `MCP_HOST` | HTTP 模式监听地址 | `0.0.0.0` |
-| 环境变量 | `MCP_AUTH_TOKEN` | HTTP 模式 Bearer 鉴权 token(见下) | 未设置=不鉴权 |
+| 环境变量 | `WORKBUDDY_JWT_SECRET` | HTTP 模式校验 WorkBuddy HS256 JWT 的共享密钥 | HTTP 模式必填 |
+| 环境变量 | `WORKBUDDY_JWT_ISSUER` | JWT `iss` | `workbuddy-local` |
+| 环境变量 | `WORKBUDDY_JWT_AUDIENCE` | JWT `aud` | `pharma-crm-mcp` |
 | 启动参数 | `--http` | 以 Streamable HTTP 模式启动 | — |
 | 启动参数 | `--employee-id <id>` | 指定默认身份(优先级高于环境变量) | — |
 | 启动参数 | `--employee-name <姓名>` | 按姓名指定默认身份 | — |
 
-运行时可用 `set_current_employee` 工具随时切换身份(内存状态,随进程生命周期;
-HTTP 模式下为所有 session 共享的服务级状态)。
+`set_current_employee` 只在 stdio 本地开发模式可用。HTTP 模式从 JWT 映射 CRM 员工，
+初始化后身份固定在该 session；后续请求换员工 token 或工具参数指定其他员工都会被拒绝。
 
 ## HTTP(Streamable HTTP)模式
 
 ```bash
-MCP_AUTH_TOKEN=请换成强随机串 npm run start:http
+WORKBUDDY_JWT_SECRET='请换成至少32字符随机串' npm run start:http
 ```
 
 - **Endpoint**:`POST/GET/DELETE http://<host>:5620/mcp`(MCP Streamable HTTP 标准)
-- **健康检查**:`GET http://<host>:5620/health` → `{"ok":true,"tools":25}`
-- **鉴权**:设置了 `MCP_AUTH_TOKEN` 后,**所有** HTTP 请求(含 `/health`)必须携带
-  `Authorization: Bearer <MCP_AUTH_TOKEN>`,否则返回 401;未设置则全部放行(方便本地开发)。
-  stdio 模式不鉴权。**公网部署务必设置强随机 token。**
+- **健康检查**:`GET http://<host>:5620/health` → `{"ok":true,"tools":27}`，无需 JWT。
+- **鉴权**:除 `/health` 外，每个 HTTP 请求必须携带短期用户 JWT：
+  `Authorization: Bearer <JWT>`。必需 claims 为 `sub`、`employeeId`、`role`、`iss`、
+  `aud`、`exp`；MCP 还会向 CRM 查询员工并核对角色。演示版使用 HS256，共享密钥只配置
+  在 WorkBuddy 和 MCP，不发送给浏览器。
 - **Session 管理**:有状态模式。客户端先发 `initialize` 建立会话,响应头
   `mcp-session-id` 返回会话 id;后续请求(含 `tools/list`、`tools/call`)需携带
   `mcp-session-id` 头;`DELETE /mcp` 关闭会话并清理资源。POST 响应为 JSON
@@ -80,7 +83,7 @@ MCP_AUTH_TOKEN=请换成强随机串 npm run start:http
     "pharma-crm": {
       "url": "http://<服务器IP或域名>:5620/mcp",
       "headers": {
-        "Authorization": "Bearer <MCP_AUTH_TOKEN>"
+        "Authorization": "Bearer <WORKBUDDY动态签发的用户JWT>"
       }
     }
   }
@@ -90,8 +93,8 @@ MCP_AUTH_TOKEN=请换成强随机串 npm run start:http
 curl 手工验证:
 
 ```bash
-TOKEN=<MCP_AUTH_TOKEN>
-curl -s http://localhost:5620/health -H "Authorization: Bearer $TOKEN"
+TOKEN=$(WORKBUDDY_JWT_SECRET="$WORKBUDDY_JWT_SECRET" node scripts/create-demo-jwt.mjs <employeeId> MR)
+curl -s http://localhost:5620/health
 # initialize(保存响应头里的 mcp-session-id)
 curl -si http://localhost:5620/mcp \
   -H "Authorization: Bearer $TOKEN" \
@@ -110,8 +113,7 @@ curl -s http://localhost:5620/mcp \
 也可运行脚本化冒烟(需 CRM 已在 5618 运行):
 
 ```bash
-node scripts/smoke-test-http.mjs                 # 未设 token 的场景
-MCP_AUTH_TOKEN=xxx node scripts/smoke-test-http.mjs   # 会额外验证 401/200 鉴权链路
+WORKBUDDY_JWT_SECRET="$WORKBUDDY_JWT_SECRET" node scripts/smoke-test-http.mjs
 ```
 
 ## 本地 stdio 客户端配置
@@ -152,7 +154,18 @@ Claude Desktop 配置文件位置:
 - macOS:`~/Library/Application Support/Claude/claude_desktop_config.json`
 - Windows:`%APPDATA%\Claude\claude_desktop_config.json`
 
-## 工具清单(25 个)
+## 工具清单
+
+HTTP JWT 模式共 27 个工具；stdio 模式额外提供 `set_current_employee`，共 28 个。
+演示主链路优先使用：
+
+| 工具名 | 说明 | 对应 REST API |
+|---|---|---|
+| `get_my_day` | 当前代表今日安排、待跟进、推荐客户和 KPI | `GET /api/agent/my-day` |
+| `prepare_hcp_visit` | HCP、多任职、历史、任务、Account Plan、资料和库存简报 | `GET /api/agent/prepare-visit` |
+| `complete_hcp_visit` | 经确认后幂等创建拜访、关联记录和后续任务 | `POST /api/agent/complete-visit` |
+
+原子工具：
 
 | 工具名 | 说明 | 对应 REST API |
 |---|---|---|
@@ -204,8 +217,11 @@ mcp-server/
 ├── tsconfig.json
 ├── README.md
 ├── scripts/
+│   ├── create-demo-jwt.mjs   # 生成本地演示用户 JWT
 │   ├── smoke-test.mjs        # stdio 冒烟
-│   └── smoke-test-http.mjs   # HTTP 冒烟
+│   └── smoke-test-http.mjs   # WorkBuddy JWT + 三个复合工具 HTTP 冒烟
 └── src/
-    └── index.ts    # 全部工具注册 + CRM fetch 封装 + 身份状态 + stdio/HTTP 双传输
+    ├── auth.ts           # JWT 校验与 CRM 员工映射
+    ├── session-auth.ts   # session 身份隔离
+    └── index.ts          # 工具注册 + stdio/HTTP 双传输
 ```

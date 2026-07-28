@@ -1,158 +1,185 @@
 /**
- * MCP over HTTP(Streamable HTTP)冒烟测试。
- * 前置:CRM dev server(5618)+ MCP HTTP 模式(5620)均已启动。
- * 流程:/health → (可选)鉴权 401/200 → initialize → tools/list(25 个)
- *       → tools/call summarize_employee_visits → DELETE 关闭 session
- *
- * 用法:
- *   node scripts/smoke-test-http.mjs [员工姓名]
- * 环境变量:
- *   MCP_URL         默认 http://localhost:5620
- *   MCP_AUTH_TOKEN  设置后:所有请求带 Bearer,并额外验证「不带 token 返回 401」
- *   CRM_BASE_URL    默认 http://localhost:5618(用于取一个真实代表姓名)
+ * WorkBuddy → MCP → CRM HTTP 端到端冒烟。
+ * 前置：CRM :5618、MCP HTTP :5620，二者使用已迁移且已 seed 的同一数据库。
  */
+import { createHmac, randomUUID } from "node:crypto";
 
 const MCP_URL = (process.env.MCP_URL ?? "http://localhost:5620").replace(/\/+$/, "");
 const CRM_BASE_URL = (process.env.CRM_BASE_URL ?? "http://localhost:5618").replace(/\/+$/, "");
-const TOKEN = process.env.MCP_AUTH_TOKEN;
+const SECRET = process.env.WORKBUDDY_JWT_SECRET;
+const ISSUER = process.env.WORKBUDDY_JWT_ISSUER ?? "workbuddy-local";
+const AUDIENCE = process.env.WORKBUDDY_JWT_AUDIENCE ?? "pharma-crm-mcp";
+if (!SECRET) throw new Error("必须设置 WORKBUDDY_JWT_SECRET");
 
-const authHeaders = TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {};
-const mcpHeaders = {
-  ...authHeaders,
-  "Content-Type": "application/json",
-  Accept: "application/json, text/event-stream",
-};
+function jwt(employee) {
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const unsigned = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({
+    sub: `workbuddy-demo:${employee.employeeCode}`,
+    employeeId: employee.id,
+    role: employee.role,
+    departmentId: employee.departmentId,
+    tenantId: "demo-company",
+    iss: ISSUER,
+    aud: AUDIENCE,
+    iat: now,
+    exp: now + 300,
+  })}`;
+  return `${unsigned}.${createHmac("sha256", SECRET).update(unsigned).digest("base64url")}`;
+}
 
 let nextId = 1;
-
-/** 解析响应:兼容 application/json 与 text/event-stream(SSE) */
-async function parseMcpResponse(res) {
-  const ct = res.headers.get("content-type") ?? "";
-  const text = await res.text();
-  if (ct.includes("text/event-stream")) {
-    for (const line of text.split("\n")) {
-      if (line.startsWith("data:")) {
-        const data = line.slice(5).trim();
-        if (data) return JSON.parse(data);
-      }
-    }
-    throw new Error(`SSE 响应中没有 data 行:${text.slice(0, 200)}`);
+async function parseResponse(response) {
+  const text = await response.text();
+  if ((response.headers.get("content-type") ?? "").includes("text/event-stream")) {
+    const line = text.split("\n").find((item) => item.startsWith("data:"));
+    return line ? JSON.parse(line.slice(5).trim()) : undefined;
   }
   return text ? JSON.parse(text) : undefined;
 }
 
-async function mcpRequest(method, params, sessionId) {
-  const res = await fetch(`${MCP_URL}/mcp`, {
+async function rpc(token, method, params, sessionId) {
+  const response = await fetch(`${MCP_URL}/mcp`, {
     method: "POST",
-    headers: { ...mcpHeaders, ...(sessionId ? { "mcp-session-id": sessionId } : {}) },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+    },
     body: JSON.stringify({ jsonrpc: "2.0", id: nextId++, method, params }),
   });
-  if (!res.ok) throw new Error(`${method} HTTP ${res.status}:${(await res.text()).slice(0, 300)}`);
-  return { msg: await parseMcpResponse(res), sessionId: res.headers.get("mcp-session-id") ?? sessionId };
+  const body = await parseResponse(response);
+  return { response, body, sessionId: response.headers.get("mcp-session-id") ?? sessionId };
 }
 
-function toolText(msg) {
-  if (msg.error) throw new Error(`RPC 错误:${JSON.stringify(msg.error)}`);
-  const r = msg.result;
-  if (r?.isError) throw new Error(`工具返回错误:${r.content?.[0]?.text}`);
-  return r?.content?.[0]?.text ?? "";
+function resultJson(message) {
+  if (message?.error) throw new Error(`RPC 错误：${JSON.stringify(message.error)}`);
+  if (message?.result?.isError) throw new Error(message.result.content?.[0]?.text ?? "工具执行失败");
+  return JSON.parse(message.result.content[0].text);
+}
+
+async function initialize(employee) {
+  const token = jwt(employee);
+  const initialized = await rpc(token, "initialize", {
+    protocolVersion: "2025-03-26",
+    capabilities: {},
+    clientInfo: { name: "workbuddy-demo-smoke", version: "1.0.0" },
+  });
+  if (!initialized.response.ok || !initialized.sessionId) {
+    throw new Error(`initialize 失败：HTTP ${initialized.response.status}`);
+  }
+  await rpc(token, "notifications/initialized", {}, initialized.sessionId);
+  return { token, sessionId: initialized.sessionId };
 }
 
 try {
-  // 0. 取一个真实代表姓名(参数 > CRM 查询)
-  let employeeName = process.argv[2];
-  if (!employeeName) {
-    const res = await fetch(`${CRM_BASE_URL}/api/employees`);
-    const { data } = await res.json();
-    const flat = [];
-    const walk = (nodes) => nodes.forEach((n) => {
-      flat.push(n);
-      if (n.subordinates?.length) walk(n.subordinates);
-    });
-    walk(data ?? []);
-    const mr = flat.find((e) => e.role === "MR");
-    if (!mr) throw new Error("CRM 中未找到任何 MR");
-    employeeName = mr.name;
-  }
-  console.log(`测试代表:${employeeName}(MCP_URL=${MCP_URL}, 鉴权=${TOKEN ? "启用" : "未启用"})\n`);
-
-  // 1. 鉴权负向用例(仅当设了 token):不带 token 必须 401
-  if (TOKEN) {
-    const noAuth = await fetch(`${MCP_URL}/mcp`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 0, method: "tools/list", params: {} }),
-    });
-    console.log("== 鉴权:不带 token 访问 /mcp ==", noAuth.status === 401 ? "✓ 401(正确拒绝)" : `✗ ${noAuth.status}`);
-    if (noAuth.status !== 401) throw new Error(`不带 token 应返回 401,实际 ${noAuth.status}`);
-
-    const noAuthHealth = await fetch(`${MCP_URL}/health`);
-    console.log("== 鉴权:不带 token 访问 /health ==", noAuthHealth.status === 401 ? "✓ 401(正确拒绝)" : `✗ ${noAuthHealth.status}`);
-    if (noAuthHealth.status !== 401) throw new Error(`/health 不带 token 应返回 401,实际 ${noAuthHealth.status}`);
-  }
-
-  // 2. /health(带 token 时应 200)
-  const healthRes = await fetch(`${MCP_URL}/health`, { headers: authHeaders });
-  const health = await healthRes.json();
-  console.log(`\n== GET /health == HTTP ${healthRes.status}`, JSON.stringify(health));
-  if (!healthRes.ok || health.ok !== true) throw new Error("/health 异常");
-  if (health.tools !== 25) throw new Error(`期望 tools=25,实际 ${health.tools}`);
-
-  // 3. initialize → 拿 sessionId
-  const init = await mcpRequest("initialize", {
-    protocolVersion: "2025-03-26",
-    capabilities: {},
-    clientInfo: { name: "smoke-test-http", version: "0.1.0" },
-  });
-  const sessionId = init.sessionId;
-  console.log(`\n== initialize == ✓ sessionId=${sessionId}, server=${init.msg.result?.serverInfo?.name}@${init.msg.result?.serverInfo?.version}`);
-  if (!sessionId) throw new Error("initialize 响应缺少 mcp-session-id 头(有状态模式必须返回)");
-
-  await fetch(`${MCP_URL}/mcp`, {
+  const unavailable = await fetch(`${MCP_URL}/mcp`, {
     method: "POST",
-    headers: { ...mcpHeaders, "mcp-session-id": sessionId },
-    body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} }),
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
   });
+  if (unavailable.status !== 401) throw new Error(`无 JWT 应返回 401，实际 ${unavailable.status}`);
 
-  // 4. tools/list
-  const list = await mcpRequest("tools/list", {}, sessionId);
-  const tools = list.msg.result.tools;
-  console.log(`== tools/list == 共 ${tools.length} 个工具`);
-  if (tools.length !== 25) throw new Error(`期望 25 个工具,实际 ${tools.length}`);
-  if (!tools.some((t) => t.name === "summarize_employee_visits")) {
-    throw new Error("tools/list 中缺少 summarize_employee_visits");
+  const healthResponse = await fetch(`${MCP_URL}/health`);
+  const health = await healthResponse.json();
+  if (!healthResponse.ok || health.ok !== true || health.tools !== 27) {
+    throw new Error(`健康检查异常：${JSON.stringify(health)}`);
   }
-  console.log("  ✓ 含 summarize_employee_visits");
 
-  // 5. tools/call summarize_employee_visits(范围默认覆盖种子数据期,可用 SMOKE_FROM/SMOKE_TO 覆盖)
-  const from = process.env.SMOKE_FROM ?? "2026-06-01";
-  const to = process.env.SMOKE_TO ?? "2026-07-31";
-  const sumRes = await mcpRequest("tools/call", {
-    name: "summarize_employee_visits",
-    arguments: { employeeName, from, to },
-  }, sessionId);
-  const sum = JSON.parse(toolText(sumRes.msg));
-  console.log(
-    `\n== tools/call summarize_employee_visits {employeeName:"${employeeName}", ${from}~${to}} ==`,
-    `\n  employee=${sum.employee?.name}(${sum.employee?.role}), totalVisits=${sum.totalVisits},`,
-    `\n  dailyBreakdown=${sum.dailyBreakdown?.length} 天, byType=${JSON.stringify(sum.byType)},`,
-    `\n  topHcps 前 3=${JSON.stringify(sum.topHcps?.slice(0, 3))},`,
-    `\n  coveredHcpCount=${sum.coveredHcpCount}, jointVisitCount=${sum.jointVisitCount}, avgPerDay=${sum.avgPerDay}`,
-  );
-  for (const k of ["dailyBreakdown", "byType", "byValidity", "bySource", "topHcps"]) {
-    if (!Array.isArray(sum[k])) throw new Error(`summarize_employee_visits 缺少数组字段 ${k}`);
-  }
-  if (sum.totalVisits < 1) throw new Error("summarize_employee_visits 未统计到任何拜访");
-
-  // 6. 关闭 session
-  const del = await fetch(`${MCP_URL}/mcp`, {
-    method: "DELETE",
-    headers: { ...authHeaders, "mcp-session-id": sessionId },
+  const employeeResponse = await fetch(`${CRM_BASE_URL}/api/employees`);
+  const tree = (await employeeResponse.json()).data ?? [];
+  const flat = [];
+  const walk = (nodes) => nodes.forEach((employee) => {
+    flat.push(employee);
+    walk(employee.subordinates ?? []);
   });
-  console.log(`\n== DELETE /mcp 关闭 session == HTTP ${del.status}`);
+  walk(tree);
+  const representatives = flat.filter((employee) => employee.role === "MR").slice(0, 2);
+  if (representatives.length < 2) throw new Error("演示数据至少需要两名 MR");
 
-  console.log("\nHTTP_SMOKE_TEST_RESULT=PASS");
-} catch (e) {
-  console.error("\nHTTP_SMOKE_TEST_RESULT=FAIL", e.message);
+  const first = await initialize(representatives[0]);
+  const second = await initialize(representatives[1]);
+  const crossActor = await rpc(second.token, "tools/list", {}, first.sessionId);
+  if (crossActor.response.status !== 401) {
+    throw new Error(`跨员工复用 session 应返回 401，实际 ${crossActor.response.status}`);
+  }
+
+  const list = await rpc(first.token, "tools/list", {}, first.sessionId);
+  const tools = list.body.result.tools;
+  for (const name of ["get_my_day", "prepare_hcp_visit", "complete_hcp_visit"]) {
+    if (!tools.some((tool) => tool.name === name)) throw new Error(`缺少复合工具 ${name}`);
+  }
+  if (tools.some((tool) => tool.name === "set_current_employee")) {
+    throw new Error("HTTP JWT 模式不应暴露 set_current_employee");
+  }
+
+  const myDay = resultJson((await rpc(first.token, "tools/call", {
+    name: "get_my_day",
+    arguments: { asOf: "2026-07-24" },
+  }, first.sessionId)).body);
+  if (myDay.representative.id !== representatives[0].id) throw new Error("get_my_day 身份串号");
+
+  const search = resultJson((await rpc(first.token, "tools/call", {
+    name: "search_hcp",
+    arguments: { mine: "true" },
+  }, first.sessionId)).body);
+  const hcp = search.data?.[0];
+  if (!hcp) throw new Error("当前代表没有可用于演示的 HCP");
+
+  const preparation = resultJson((await rpc(first.token, "tools/call", {
+    name: "prepare_hcp_visit",
+    arguments: { hcpId: hcp.id },
+  }, first.sessionId)).body);
+  if (preparation.hcp.id !== hcp.id || preparation.representative.id !== representatives[0].id) {
+    throw new Error("prepare_hcp_visit 返回对象或身份错误");
+  }
+
+  const idempotencyKey = `demo-${randomUUID()}`;
+  const completeArguments = {
+    idempotencyKey,
+    confirmed: true,
+    hcpId: hcp.id,
+    hcoId: preparation.hcp.hco?.id,
+    visitDate: new Date().toISOString(),
+    type: "FACE_TO_FACE",
+    purposes: ["临床信息沟通"],
+    outcome: "已完成 WorkBuddy 演示沟通",
+    summary: "由 WorkBuddy 通过 MCP 创建的演示拜访",
+    nextStep: "一周后复访",
+    followUp: {
+      title: "WorkBuddy 演示：一周后复访",
+      priority: "NORMAL",
+      dueDate: new Date(Date.now() + 7 * 86400000).toISOString(),
+    },
+  };
+  const firstWrite = resultJson((await rpc(first.token, "tools/call", {
+    name: "complete_hcp_visit",
+    arguments: completeArguments,
+  }, first.sessionId)).body);
+  const replay = resultJson((await rpc(first.token, "tools/call", {
+    name: "complete_hcp_visit",
+    arguments: completeArguments,
+  }, first.sessionId)).body);
+  if (!firstWrite.visit?.id || replay.visit?.id !== firstWrite.visit.id || replay.replayed !== true) {
+    throw new Error("幂等重放未返回同一拜访");
+  }
+
+  for (const session of [first, second]) {
+    await fetch(`${MCP_URL}/mcp`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.token}`, "mcp-session-id": session.sessionId },
+    });
+  }
+  console.log(JSON.stringify({
+    result: "PASS",
+    representative: myDay.representative.name,
+    hcp: preparation.hcp.name,
+    visitId: firstWrite.visit.id,
+    operationId: firstWrite.operationId,
+    replayed: replay.replayed,
+  }, null, 2));
+} catch (error) {
+  console.error(`HTTP_SMOKE_TEST_RESULT=FAIL ${error.message}`);
   process.exitCode = 1;
 }

@@ -68,7 +68,8 @@ test("verifyWorkBuddyJwt validates issuer and audience", () => {
 });
 
 test("verifyWorkBuddyJwt requires user, employee, role, and expiration claims", () => {
-  const { employeeId: _employeeId, ...missingEmployee } = validPayload;
+  const missingEmployee: Record<string, unknown> = { ...validPayload };
+  delete missingEmployee.employeeId;
   assert.throws(
     () => verifyWorkBuddyJwt(token(missingEmployee), config, new Date(1_800_000_100_000)),
     (error: unknown) => error instanceof AuthError && error.code === "INVALID_CLAIMS",

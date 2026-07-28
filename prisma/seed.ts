@@ -47,6 +47,7 @@ function genPurposes(): string[] {
 
 async function main() {
   console.log("清空旧数据...");
+  await prisma.mcpOperation.deleteMany();
   await prisma.visitMaterialUsage.deleteMany();
   await prisma.productMaterial.deleteMany();
   await prisma.salesResult.deleteMany();

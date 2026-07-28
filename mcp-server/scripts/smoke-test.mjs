@@ -84,7 +84,7 @@ try {
     console.log(`  - ${t.name}  (description ${descLen} 字符)`);
     if (!descLen) throw new Error(`${t.name} 缺少 description`);
   }
-  if (tools.length !== 25) throw new Error(`期望 25 个工具,实际 ${tools.length}`);
+  if (tools.length !== 28) throw new Error(`期望 28 个工具,实际 ${tools.length}`);
 
   // 3. search_hcp(query=张)
   const searchRes = await request("tools/call", {

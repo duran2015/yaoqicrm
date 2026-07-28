@@ -14,8 +14,9 @@
  *   CRM_EMPLOYEE_ID   默认操作身份(员工 id),也可用启动参数 --employee-id
  *   MCP_PORT          HTTP 模式监听端口,默认 5620
  *   MCP_HOST          HTTP 模式监听地址,默认 0.0.0.0
- *   MCP_AUTH_TOKEN    HTTP 模式 Bearer 鉴权 token;设置后所有 HTTP 请求必须
- *                     携带 Authorization: Bearer <token>,否则 401;未设置则放行
+ *   WORKBUDDY_JWT_SECRET   HTTP 模式 HS256 JWT 共享密钥(必填)
+ *   WORKBUDDY_JWT_ISSUER   JWT issuer,默认 workbuddy-local
+ *   WORKBUDDY_JWT_AUDIENCE JWT audience,默认 pharma-crm-mcp
  * 启动参数:
  *   --http                 以 Streamable HTTP 模式启动(默认 stdio)
  *   --employee-id <id>     指定默认员工 id
