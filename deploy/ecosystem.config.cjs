@@ -52,5 +52,19 @@ module.exports = {
       max_restarts: 10,
       restart_delay: 3000,
     },
+    {
+      name: "pharma-crm-intelligence",
+      cwd: ROOT,
+      script: path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs"),
+      args: "scripts/collect-sales-intelligence.ts --all",
+      cron_restart: "15 2 * * *",
+      autorestart: false,
+      env: {
+        NODE_ENV: "production",
+        CRM_BASE_URL: "http://localhost:5618/pharma",
+        INTELLIGENCE_SEARCH_ENDPOINT: process.env.INTELLIGENCE_SEARCH_ENDPOINT || "",
+        INTELLIGENCE_SEARCH_API_KEY: process.env.INTELLIGENCE_SEARCH_API_KEY || "",
+      },
+    },
   ],
 };

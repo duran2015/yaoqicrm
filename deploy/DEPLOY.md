@@ -36,12 +36,13 @@ APP_DIR=/srv/crm ./deploy/deploy.sh user@host   # 强制指定远端目录
 
 目标目录默认 `/opt/pharma-crm`;无写权限时自动回退 `~/pharma-crm`。
 
-部署后两个 PM2 进程:
+部署后三个 PM2 进程:
 
 | 进程 | 内容 | 端口 |
 |---|---|---|
 | `pharma-crm` | Next standalone server(`NODE_ENV=production`,默认仅本机监听) | 5618 |
 | `pharma-crm-mcp` | MCP server HTTP 模式(`--http`,`CRM_BASE_URL=http://localhost:5618`) | 5620 |
+| `pharma-crm-intelligence` | 每日白名单情报采集任务(02:15) | 无 |
 
 ## WorkBuddy 用户 JWT
 
@@ -65,7 +66,25 @@ AI 工具侧远程 MCP 配置(URL + Authorization 头):
 }
 ```
 
-验证:`curl http://<服务器>:5620/health` → `{"ok":true,"tools":27}`
+验证:`curl http://<服务器>:5620/health` → `{"ok":true,"tools":30}`
+
+## 销售情报每日采集
+
+`pharma-crm-intelligence` 每天服务器时间 02:15 执行一次白名单采集。它调用本机 CRM API，不在脚本中保存数据库路径或 WorkBuddy JWT。
+
+```bash
+npm run intelligence:collect
+npx tsx scripts/collect-sales-intelligence.ts --source <source-id>
+npx tsx scripts/collect-sales-intelligence.ts --product <product-id>
+pm2 logs pharma-crm-intelligence --lines 100
+```
+
+搜索补充为可选能力，通过部署环境提供 `INTELLIGENCE_SEARCH_ENDPOINT` 和
+`INTELLIGENCE_SEARCH_API_KEY`。未配置时白名单采集仍可运行，搜索来源返回空结果。
+密钥不得写入来源 `configJson`、Git 或 PM2 配置文件。
+
+单来源失败会把任务标记为 `PARTIAL`，不会删除历史情报。修复来源配置后可在
+CRM 点击“立即采集”或执行指定来源命令。
 
 ## 数据备份
 
