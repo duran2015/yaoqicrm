@@ -78,3 +78,11 @@
 - [ ] 运行全量测试、lint、类型检查、Prisma 校验和生产构建。
 - [ ] 更新演示说明与执行记录。
 - [ ] 提交 `docs: add representative workbench demo guide`。
+
+## Execution Record
+
+- Completed: 2026-07-28
+- Browser MR view: 陈静 displayed a planned visit with “开始拜访” plus ranked recommendations.
+- Browser follow-up view: 张伟 displayed overdue and high-priority follow-ups with “创建复访”.
+- Browser manager view: 李强 displayed the team aggregate badge and no personal workbench.
+- Final automated verification: 53/53 tests, ESLint, TypeScript, Prisma validation, 59-page production build and diff check passed.

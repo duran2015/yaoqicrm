@@ -71,3 +71,10 @@
 - [ ] 浏览器编辑四项正文并确认关联对象数量不变。
 - [ ] 重置种子数据。
 - [ ] 记录自动化和浏览器结果。
+
+## Execution Record
+
+- Completed: 2026-07-28
+- Browser: edited core strategy and observed the refreshed value and success notice.
+- Relation safety: product/stakeholder/milestone counts remained `1/2/2` before and after save.
+- Automated checks are recorded in the representative workbench plan's final combined verification.
