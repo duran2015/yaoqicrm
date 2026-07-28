@@ -7,6 +7,7 @@ import {
   assignmentInclude, HCP_STRING_FIELDS, HCP_INT_FIELDS, TIERS,
   pickFields, parseEducations, parseBankAccounts,
 } from "@/lib/customer";
+import { isCurrentAffiliation } from "@/lib/hcp-affiliation";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -24,6 +25,10 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       hco: { include: { territory: { select: { id: true, name: true } } } },
       educations: true,
       bankAccounts: true,
+      affiliations: {
+        include: { hco: { select: { id: true, code: true, name: true, type: true, level: true } } },
+        orderBy: [{ isPrimary: "desc" as const }, { effectiveDate: "desc" as const }, { createdAt: "desc" as const }],
+      },
       assignments: assignmentInclude,
       visits: {
         orderBy: { visitDate: "desc" },
@@ -72,6 +77,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
   return NextResponse.json({
     ...maskHcp(hcp),
+    affiliations: hcp.affiliations.map((item) => ({ ...item, isCurrent: isCurrentAffiliation(item, new Date()) })),
     bankAccounts: maskBankAccounts(hcp.bankAccounts),
     sampleSummary: [...sampleByProduct.values()],
     stats: {

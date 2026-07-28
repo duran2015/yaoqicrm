@@ -60,6 +60,22 @@ export interface Hcp {
   assignments?: CustomerAssignment[];
 }
 
+export interface HcpAffiliationView {
+  id: string;
+  hcpId: string;
+  hcoId: string;
+  hco: Pick<Hco, "id" | "code" | "name" | "type" | "level">;
+  departmentName: string;
+  title?: string | null;
+  adminDuty?: string | null;
+  isPrimary: boolean;
+  isCurrent: boolean;
+  effectiveDate: string;
+  endDate?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface SampleLot {
   id: string;
   lotNumber: string;
@@ -154,6 +170,7 @@ export interface Visit {
 }
 
 export interface HcpDetail extends Hcp, HcpProfileFields {
+  affiliations: HcpAffiliationView[];
   educations: HcpEducation[];
   bankAccounts: HcpBankAccount[];
   visits: Visit[];
