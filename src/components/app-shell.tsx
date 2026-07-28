@@ -27,6 +27,7 @@ const WORK_NAV_ITEMS = [
   { href: "/tour-plans", label: "周计划", icon: "🗓️" },
   { href: "/cycle-plans", label: "月度覆盖", icon: "🎯" },
   { href: "/account-plans", label: "客户策略", icon: "🧭" },
+  { href: "/sales-results", label: "销售结果", icon: "📈" },
   { href: "/tasks", label: "后续任务", icon: "☑️" },
   { href: "/samples", label: "样品库存", icon: "📦" },
   { href: "/events", label: "会议", icon: "🎤" },
