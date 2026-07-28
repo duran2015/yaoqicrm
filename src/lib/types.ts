@@ -383,6 +383,7 @@ export interface RepresentativeWorkbenchData {
     reason: string;
   }>;
   recommendationEmptyReason?: string | null;
+  relevantIntelligence?: SalesIntelligence[];
 }
 
 export interface TerritoryRow {

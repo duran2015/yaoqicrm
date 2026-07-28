@@ -6,6 +6,7 @@ import type { ListResponse, Product } from "@/lib/types";
 import { fmtCurrency, fmtDate } from "@/lib/utils";
 import { Badge, Button, Card, Empty, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { ProductMaterialEditor } from "@/components/product-material-editor";
+import { SalesIntelligenceCard } from "@/components/sales-intelligence-card";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -100,6 +101,16 @@ export default function ProductsPage() {
                         const active = material.status === "APPROVED" && new Date(material.effectiveDate) <= new Date("2026-07-24T00:00:00+08:00") && new Date(material.expiryDate) > new Date("2026-07-24T00:00:00+08:00");
                         return <div key={material.id} className="rounded bg-slate-50 p-2 text-xs"><div className="flex items-center justify-between"><a href={material.externalUrl} target="_blank" className="font-medium text-emerald-700">{material.title} · {material.version}</a><Badge tone={active ? "emerald" : material.status === "DRAFT" ? "amber" : "slate"}>{active ? "当前有效" : material.status === "DRAFT" ? "草稿" : "已停用"}</Badge></div><div className="mt-1 text-slate-500">{material.messageSummary}</div><div className="mt-1 flex justify-between text-slate-400"><span>{material.approvalCode ?? "未批准"}</span><span>{fmtDate(material.effectiveDate)}—{fmtDate(material.expiryDate)}</span></div>{material.status === "DRAFT"&&<div className="mt-2 flex gap-2"><Button size="sm" onClick={async()=>{await apiPatch(`/api/product-materials/${material.id}`,{status:"APPROVED"});load();}}>批准</Button><Button size="sm" variant="ghost" onClick={async()=>{await apiPatch(`/api/product-materials/${material.id}`,{status:"RETIRED"});load();}}>停用</Button></div>}{material.status === "APPROVED"&&<Button className="mt-2" size="sm" variant="ghost" onClick={async()=>{await apiPatch(`/api/product-materials/${material.id}`,{status:"RETIRED"});load();}}>停用</Button>}</div>;
                       })}{!(p.materials ?? []).length&&<div className="text-xs text-slate-400">暂无资料版本</div>}</div>
+                    </div>
+                    <div className="mt-4 border-t border-slate-100 pt-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-600">市场与知识</span>
+                        <a href="/sales-intelligence" className="text-xs text-emerald-700">查看全部</a>
+                      </div>
+                      <div className="space-y-2">
+                        {(p.intelligenceLinks ?? []).map(({ intelligence }) => <SalesIntelligenceCard key={intelligence.id} item={intelligence} />)}
+                        {!(p.intelligenceLinks ?? []).length && <div className="text-xs text-slate-400">暂无相关情报</div>}
+                      </div>
                     </div>
                   </Card>
                 ))}

@@ -23,6 +23,11 @@ export async function GET(req: NextRequest) {
     include: {
       sampleLots: { select: { id: true, lotNumber: true, expiryDate: true, totalQty: true } },
       materials: { orderBy: { effectiveDate: "desc" } },
+      intelligenceLinks: {
+        where: { intelligence: { verificationStatus: { in: ["VERIFIED", "PENDING_REVIEW"] } } },
+        include: { intelligence: { include: { products: { include: { product: true } }, therapeuticAreas: true, competitors: { include: { competitor: true } } } } },
+        take: 4,
+      },
     },
     orderBy: [{ division: "asc" }, { brand: "asc" }],
   });

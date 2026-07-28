@@ -3,6 +3,8 @@ import { err } from "@/lib/api";
 import { selectVisitPreparationMaterials } from "@/lib/agent-demo";
 import { prisma } from "@/lib/prisma";
 import { signedQuantity } from "@/lib/sample-inventory";
+import { rankRelevantIntelligence } from "@/lib/intelligence-relevance";
+import { shapeIntelligenceItem } from "@/lib/intelligence-query";
 
 export async function GET(req: NextRequest) {
   const employeeId = req.nextUrl.searchParams.get("employeeId")?.trim();
@@ -134,6 +136,44 @@ export async function GET(req: NextRequest) {
       })
     : [];
 
+  const intelligenceRecords = await prisma.salesIntelligence.findMany({
+    where: {
+      verificationStatus: { in: ["VERIFIED", "PENDING_REVIEW"] },
+      OR: [
+        ...(productIds.size ? [{ products: { some: { productId: { in: [...productIds] } } } }] : []),
+        ...(hcp.specialty ? [{ therapeuticAreas: { some: { name: { contains: hcp.specialty } } } }] : []),
+      ],
+    },
+    include: {
+      products: { include: { product: true } },
+      therapeuticAreas: true,
+      competitors: { include: { competitor: true } },
+    },
+    orderBy: [{ priority: "asc" }, { publishedAt: "desc" }],
+    take: 30,
+  });
+  const relevantIntelligence = rankRelevantIntelligence(
+    intelligenceRecords.map((item) => ({
+      ...item,
+      productIds: item.products.map((link) => link.productId),
+      therapeuticAreas: item.therapeuticAreas.map((link) => link.name),
+    })),
+    {
+      productIds: [...productIds],
+      therapeuticAreas: [hcp.specialty, hcp.expertise].filter((item): item is string => Boolean(item)),
+      asOf,
+      limit: 8,
+    },
+  );
+  const verifiedIntelligence = relevantIntelligence
+    .filter((item) => item.verificationStatus === "VERIFIED")
+    .slice(0, 5)
+    .map(shapeIntelligenceItem);
+  const pendingLeads = relevantIntelligence
+    .filter((item) => item.verificationStatus === "PENDING_REVIEW")
+    .slice(0, 3)
+    .map(shapeIntelligenceItem);
+
   const inventory = new Map<string, {
     lotId: string;
     lotNumber: string;
@@ -164,6 +204,15 @@ export async function GET(req: NextRequest) {
     accountPlans,
     approvedMaterials: selectVisitPreparationMaterials(materials, productIds, asOf),
     sampleInventory: [...inventory.values()].filter((item) => item.current > 0 && item.expiryDate >= asOf),
+    verifiedIntelligence,
+    pendingLeads,
+    suggestedQuestions: verifiedIntelligence.slice(0, 5).map((item) => `结合“${item.title}”，了解医生当前关注点及实际诊疗场景。`),
+    citations: [...verifiedIntelligence, ...pendingLeads].map((item) => ({
+      intelligenceId: item.id,
+      title: item.title,
+      sourceName: item.sourceName,
+      sourceUrl: item.sourceUrl,
+      verificationStatus: item.verificationStatus,
+    })),
   });
 }
-

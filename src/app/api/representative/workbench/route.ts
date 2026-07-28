@@ -7,12 +7,14 @@ import {
   recommendationReason,
   sortRepresentativeFollowUps,
 } from "@/lib/representative-workbench";
+import { rankRelevantIntelligence } from "@/lib/intelligence-relevance";
+import { shapeIntelligenceItem } from "@/lib/intelligence-query";
 
 export async function GET(req: NextRequest) {
   const employeeId = req.nextUrl.searchParams.get("employeeId")?.trim();
   if (!employeeId) return err("employeeId 为必填参数");
   const asOf = parseDate(req.nextUrl.searchParams.get("asOf")) ?? new Date();
-  const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true, role: true } });
+  const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true, role: true, division: true } });
   if (!employee) return err("员工不存在", 404);
   if (employee.role !== "MR") return err("代表工作台仅支持医药代表", 409);
 
@@ -22,7 +24,7 @@ export async function GET(req: NextRequest) {
   const monthValue = `${todayStart.getFullYear()}-${String(todayStart.getMonth() + 1).padStart(2, "0")}`;
   const monthRange = parseCycleMonth(monthValue)!;
 
-  const [todaySchedule, followUps, cyclePlan] = await Promise.all([
+  const [todaySchedule, followUps, cyclePlan, products] = await Promise.all([
     prisma.tourPlanItem.findMany({
       where: {
         tourPlan: { employeeId },
@@ -54,6 +56,7 @@ export async function GET(req: NextRequest) {
         },
       },
     }),
+    prisma.product.findMany({ where: { division: employee.division }, select: { id: true, therapeuticCategory: true } }),
   ]);
 
   const todayHcpIds = new Set(
@@ -101,11 +104,39 @@ export async function GET(req: NextRequest) {
     })).slice(0, 6);
   }
 
+  const productIds = products.map((item) => item.id);
+  const intelligence = await prisma.salesIntelligence.findMany({
+    where: {
+      verificationStatus: { in: ["VERIFIED", "PENDING_REVIEW"] },
+      products: { some: { productId: { in: productIds } } },
+    },
+    include: {
+      products: { include: { product: true } },
+      therapeuticAreas: true,
+      competitors: { include: { competitor: true } },
+    },
+    take: 30,
+  });
+  const relevantIntelligence = rankRelevantIntelligence(
+    intelligence.map((item) => ({
+      ...item,
+      productIds: item.products.map((link) => link.productId),
+      therapeuticAreas: item.therapeuticAreas.map((link) => link.name),
+    })),
+    {
+      productIds,
+      therapeuticAreas: products.map((item) => item.therapeuticCategory),
+      asOf: todayStart,
+      limit: 5,
+    },
+  ).map(shapeIntelligenceItem);
+
   return NextResponse.json({
     asOf: todayStart.toISOString(),
     todaySchedule,
     followUps: sortRepresentativeFollowUps(followUps, todayStart).slice(0, 8),
     recommendations,
     recommendationEmptyReason: cyclePlan ? null : "本月尚未建立 Cycle Plan，请先创建月度覆盖计划",
+    relevantIntelligence,
   });
 }

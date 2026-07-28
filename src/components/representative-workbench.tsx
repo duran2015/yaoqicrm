@@ -7,6 +7,7 @@ import type { RepresentativeWorkbenchData } from "@/lib/types";
 import { Badge, Button, Card, Empty, ErrorBox, Loading } from "@/components/ui";
 import { fmtDate, fmtDateTime } from "@/lib/utils";
 import { VisitFormDialog } from "@/components/visit-form";
+import { SalesIntelligenceCard } from "@/components/sales-intelligence-card";
 
 type ScheduleItem = RepresentativeWorkbenchData["todaySchedule"][number];
 
@@ -134,6 +135,18 @@ export function RepresentativeWorkbench({ employeeId, asOf }: { employeeId: stri
             </div>
           )}
         </Card>
+      </div>
+      <div className="pt-2">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800">与你相关的新情报</h3>
+            <p className="mt-0.5 text-xs text-slate-500">按负责产品、核验状态和时效自动排序</p>
+          </div>
+          <Link href="/sales-intelligence" className="text-xs text-emerald-700 hover:underline">查看情报中心 →</Link>
+        </div>
+        {data.relevantIntelligence?.length
+          ? <div className="grid gap-3 lg:grid-cols-2">{data.relevantIntelligence.map((item) => <SalesIntelligenceCard key={item.id} item={item} />)}</div>
+          : <Card><Empty text="当前没有与你负责产品相关的新情报" /></Card>}
       </div>
       <VisitFormDialog
         open={Boolean(visitItem)}
