@@ -14,6 +14,7 @@ export function TourPlanEditor({
   employeeId,
   weekStart,
   plan,
+  initialHcpId,
   onSaved,
 }: {
   open: boolean;
@@ -21,6 +22,7 @@ export function TourPlanEditor({
   employeeId: string;
   weekStart: string;
   plan?: TourPlan | null;
+  initialHcpId?: string;
   onSaved: () => void;
 }) {
   const [hcps, setHcps] = useState<Hcp[]>([]);
@@ -40,10 +42,10 @@ export function TourPlanEditor({
             hcpId: item.hcpId ?? item.hcp?.id ?? "",
             note: item.note ?? "",
           }))
-        : [{ planDate: businessDateKey(weekStart), hcpId: "", note: "" }]
+        : [{ planDate: businessDateKey(weekStart), hcpId: initialHcpId ?? "", note: "" }]
     );
     setError(null);
-  }, [open, plan, weekStart]);
+  }, [open, plan, weekStart, initialHcpId]);
 
   function changeItem(index: number, patch: Partial<DraftItem>) {
     setItems((current) => current.map((item, i) => i === index ? { ...item, ...patch } : item));

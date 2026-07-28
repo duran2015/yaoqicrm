@@ -91,6 +91,7 @@ export default function TourPlansPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<TourPlan | null>(null);
   const [visitItem, setVisitItem] = useState<TourPlan["items"][number] | null>(null);
+  const [initialHcpId, setInitialHcpId] = useState("");
 
   const manager = isManagerRole(current?.role);
   const weekDays = Array.from({ length: 7 }, (_, offset) => {
@@ -129,6 +130,14 @@ export default function TourPlansPage() {
   }, [current, subtreeIds]);
 
   useEffect(load, [load]);
+  useEffect(() => {
+    const hcpId = new URLSearchParams(window.location.search).get("hcpId");
+    if (hcpId) {
+      setInitialHcpId(hcpId);
+      setEditingPlan(null);
+      setEditorOpen(true);
+    }
+  }, []);
 
   if (!current) return null;
 
@@ -285,6 +294,7 @@ export default function TourPlansPage() {
         employeeId={current.id}
         weekStart={WEEK_START_ISO}
         plan={editingPlan}
+        initialHcpId={initialHcpId}
         onSaved={load}
       />
       <VisitFormDialog
