@@ -9,6 +9,20 @@ type HtmlConfig = {
   dateSelector?: string;
 };
 
+export function parseHtmlList(html: string, baseUrl: URL, config: HtmlConfig, limit: number) {
+  const { document } = parseHTML(html);
+  const select = (item: Element, selector: string) => item.matches(selector) ? item : item.querySelector(selector);
+  return [...document.querySelectorAll(config.itemSelector)].slice(0, limit).flatMap((item) => {
+    const title = select(item, config.titleSelector)?.textContent?.trim();
+    const href = select(item, config.linkSelector)?.getAttribute("href");
+    if (!title || !href) return [];
+    const sourceUrl = new URL(href, baseUrl).toString();
+    const excerpt = config.excerptSelector ? select(item, config.excerptSelector)?.textContent?.trim() ?? "" : "";
+    const publishedAt = config.dateSelector ? select(item, config.dateSelector)?.textContent?.trim() ?? null : null;
+    return [{ title, sourceUrl, excerpt, publishedAt }];
+  });
+}
+
 export const htmlListCollector: IntelligenceCollector = {
   async collect({ source, limit }) {
     if (!source.baseUrl) throw new Error("列表来源缺少地址");
@@ -23,15 +37,6 @@ export const htmlListCollector: IntelligenceCollector = {
     if (!response.ok) throw new Error(`列表页 HTTP ${response.status}`);
     const html = await response.text();
     if (Buffer.byteLength(html) > 2_000_000) throw new Error("列表页响应过大");
-    const { document } = parseHTML(html);
-    return [...document.querySelectorAll(config.itemSelector)].slice(0, limit).flatMap((item) => {
-      const title = item.querySelector(config.titleSelector!)?.textContent?.trim();
-      const href = item.querySelector(config.linkSelector!)?.getAttribute("href");
-      if (!title || !href) return [];
-      const sourceUrl = new URL(href, url).toString();
-      const excerpt = config.excerptSelector ? item.querySelector(config.excerptSelector)?.textContent?.trim() ?? "" : "";
-      const publishedAt = config.dateSelector ? item.querySelector(config.dateSelector)?.textContent?.trim() ?? null : null;
-      return [{ title, sourceUrl, excerpt, publishedAt }];
-    });
+    return parseHtmlList(html, url, config as HtmlConfig, limit);
   },
 };

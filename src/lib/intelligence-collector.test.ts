@@ -6,6 +6,7 @@ import {
   type CollectedDocument,
   type IntelligenceCollector,
 } from "./intelligence-collector";
+import { parseHtmlList } from "./intelligence-collectors/html-list";
 
 const document = (title: string): CollectedDocument => ({
   title,
@@ -60,4 +61,17 @@ test("only authoritative white-list results begin verified", () => {
   assert.equal(initialVerification({ sourceType: "OFFICIAL", trustLevel: "AUTHORITATIVE" }), "VERIFIED");
   assert.equal(initialVerification({ sourceType: "MEDIA", trustLevel: "TRUSTED" }), "PENDING_REVIEW");
   assert.equal(initialVerification({ sourceType: "SEARCH", trustLevel: "REFERENCE" }), "PENDING_REVIEW");
+});
+
+test("HTML list extraction can use the matched link element itself", () => {
+  const items = parseHtmlList(
+    `<div class="list"><a href="/policy/1">医保目录更新</a><a href="/policy/2">集采通知</a></div>`,
+    new URL("https://www.gov.cn/zhengce/"),
+    { itemSelector: "a", titleSelector: "a", linkSelector: "a" },
+    10,
+  );
+  assert.deepEqual(items.map((item) => ({ title: item.title, sourceUrl: item.sourceUrl })), [
+    { title: "医保目录更新", sourceUrl: "https://www.gov.cn/policy/1" },
+    { title: "集采通知", sourceUrl: "https://www.gov.cn/policy/2" },
+  ]);
 });
