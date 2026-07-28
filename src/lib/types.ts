@@ -227,6 +227,50 @@ export interface CoachingAction {
   sourceVisitId?: string | null;
 }
 
+export interface AccountStakeholder {
+  id: string;
+  decisionRole: string;
+  attitude: string;
+  notes?: string | null;
+  covered?: boolean;
+  lastVisitDate?: string | null;
+  hcp: { id: string; name: string; title?: string | null; tier?: string | null; hco?: { id: string; name: string } | null };
+}
+
+export interface AccountMilestone {
+  id: string;
+  title: string;
+  description?: string | null;
+  dueDate: string;
+  status: string;
+  completedAt?: string | null;
+  owner: { id: string; name: string; role: string };
+  followUpTask?: { id: string; title: string; status: string; dueDate?: string | null } | null;
+}
+
+export interface AccountPlan {
+  id: string;
+  year: number;
+  status: string;
+  businessGoal: string;
+  situation?: string | null;
+  strategy: string;
+  successCriteria: string;
+  hco: { id: string; name: string; level?: string | null; isStrategic?: string | null };
+  owner: { id: string; name: string; role: string; division: string };
+  products: Array<{ id: string; product: Product }>;
+  stakeholders: AccountStakeholder[];
+  milestones: AccountMilestone[];
+  progress: { total: number; completed: number; progress: number; overdue: number };
+  uncoveredDecisionMakers: number;
+  activity?: {
+    visitCount: number;
+    recentVisits: Array<{ id: string; visitDate: string; employee: { id: string; name: string }; hcp?: { id: string; name: string } | null }>;
+    meetings: Array<{ id: string; event: MedEvent; hcp: { id: string; name: string } }>;
+    openTasks: FollowUpTask[];
+  };
+}
+
 export interface DashboardData {
   employee: { id: string; name: string; role: string; division: string };
   scope: { employeeCount: number; isManager: boolean };
