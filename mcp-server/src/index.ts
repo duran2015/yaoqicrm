@@ -822,6 +822,47 @@ tool(
     }),
 );
 
+// 26. get_my_day -------------------------------------------------------------
+tool(
+  "get_my_day",
+  {
+    title: "查看我的今日工作",
+    description:
+      "WorkBuddy 代表首页复合工具:一次返回当前登录代表的今日安排、待跟进、推荐客户和个人 KPI。身份固定取当前 JWT 会话,不能查询其他代表。",
+    inputSchema: {
+      asOf: z.string().optional().describe("演示统计基准日 YYYY-MM-DD,缺省使用 2026-07-24"),
+    },
+  },
+  async ({ asOf }) =>
+    callTool(() =>
+      crmFetch("/api/agent/my-day", {
+        query: {
+          employeeId: requireEmployee(context),
+          asOf: asOf ?? DEMO_AS_OF,
+        },
+      }),
+    ),
+);
+
+// 27. prepare_hcp_visit -------------------------------------------------------
+tool(
+  "prepare_hcp_visit",
+  {
+    title: "生成 HCP 拜访前简报",
+    description:
+      "为当前登录代表组合 HCP 档案、多任职、最近拜访、待跟进任务、Account Plan、批准资料和可用样品库存。用于拜访前准备,不产生 CRM 写操作。",
+    inputSchema: {
+      hcpId: z.string().describe("要准备拜访的医生 id,可由 search_hcp 或 get_my_day 获得"),
+    },
+  },
+  async ({ hcpId }) =>
+    callTool(() =>
+      crmFetch("/api/agent/prepare-visit", {
+        query: { employeeId: requireEmployee(context), hcpId },
+      }),
+    ),
+);
+
   toolCount = count;
   return server;
 }
