@@ -70,6 +70,30 @@ test("seed contains the complete P0 demo scenarios", async () => {
   assert.equal(await prisma.visit.count({
     where: { employeeId: relationshipRisk.ownerId, hcpId: { in: decisionMakerIds }, status: "SUBMITTED", visitDate: { gte: new Date("2025-12-31T16:00:00.000Z"), lt: new Date("2026-12-31T16:00:00.000Z") } },
   }), 0, "relationship-risk decision maker must be uncovered by the plan owner");
+
+  const salesResults = await (prisma as unknown as {
+    salesResult: { findMany(args: unknown): Promise<Array<{
+      month: Date;
+      employeeId: string;
+      productId: string;
+      hcoId: string;
+      targetAmountCents: number;
+      actualAmountCents: number;
+    }>> };
+  }).salesResult.findMany({ orderBy: { month: "asc" } });
+  assert.equal(new Set(salesResults.map((row) => row.month.toISOString())).size, 6, "sales demo needs six months");
+  assert.ok(new Set(salesResults.map((row) => row.employeeId)).size >= 3);
+  assert.ok(new Set(salesResults.map((row) => row.productId)).size >= 3);
+  assert.ok(new Set(salesResults.map((row) => row.hcoId)).size >= 3);
+  const ratesByEmployee = new Map<string, number[]>();
+  for (const row of salesResults) {
+    const rows = ratesByEmployee.get(row.employeeId) ?? [];
+    rows.push(row.targetAmountCents ? row.actualAmountCents / row.targetAmountCents : 0);
+    ratesByEmployee.set(row.employeeId, rows);
+  }
+  const scenarios = [...ratesByEmployee.values()];
+  assert.ok(scenarios.some((rates) => rates.every((rate, index) => index === 0 || rate >= rates[index - 1])), "one sales story must grow steadily");
+  assert.ok(scenarios.some((rates) => rates.at(-1)! < 0.8 && rates.at(-2)! < 0.8), "one sales story must stay below target");
 });
 
 test.after(async () => {

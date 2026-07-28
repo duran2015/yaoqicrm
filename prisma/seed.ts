@@ -47,6 +47,8 @@ function genPurposes(): string[] {
 
 async function main() {
   console.log("清空旧数据...");
+  await prisma.salesResult.deleteMany();
+  await prisma.salesImportBatch.deleteMany();
   await prisma.accountMilestone.deleteMany();
   await prisma.accountStakeholder.deleteMany();
   await prisma.accountPlanProduct.deleteMany();
@@ -278,6 +280,36 @@ async function main() {
       });
     }
   }
+
+  // ---------- 六个月销售结果：稳定增长 / 延迟改善 / 持续未达 ----------
+  console.log("创建月度销售结果...");
+  const salesRates = [
+    [0.72, 0.78, 0.84, 0.91, 0.98, 1.06],
+    [0.70, 0.69, 0.71, 0.73, 0.88, 0.96],
+    [0.66, 0.64, 0.62, 0.68, 0.70, 0.72],
+  ];
+  const salesRows = [];
+  for (let scenarioIndex = 0; scenarioIndex < 3; scenarioIndex++) {
+    const employee = mrs[scenarioIndex];
+    const product = products.filter((item) => item.division === employee.division)[scenarioIndex];
+    const hco = hcos[scenarioIndex];
+    for (let monthIndex = 0; monthIndex < 6; monthIndex++) {
+      const targetAmountCents = (9000000 + scenarioIndex * 1500000 + monthIndex * 300000);
+      const actualAmountCents = Math.round(targetAmountCents * salesRates[scenarioIndex][monthIndex]);
+      const targetQuantity = 1000 + scenarioIndex * 200 + monthIndex * 30;
+      salesRows.push({
+        month: new Date(Date.UTC(2026, 1 + monthIndex, 1) - 8 * 60 * 60 * 1000),
+        productId: product.id,
+        hcoId: hco.id,
+        employeeId: employee.id,
+        targetAmountCents,
+        actualAmountCents,
+        targetQuantity,
+        actualQuantity: Math.round(targetQuantity * salesRates[scenarioIndex][monthIndex]),
+      });
+    }
+  }
+  await prisma.salesResult.createMany({ data: salesRows });
 
   // ---------- 2026-07 月度 Cycle Plan:按客户分级生成目标快照 ----------
   console.log("创建月度客户覆盖计划...");
@@ -791,7 +823,7 @@ async function main() {
   console.log(`  员工 ${await prisma.employee.count()},部门 ${await prisma.department.count()},辖区 ${await prisma.territory.count()},机构 ${await prisma.hco.count()}`);
   console.log(`  HCP ${await prisma.hcp.count()},产品 ${await prisma.product.count()},批次 ${await prisma.sampleLot.count()}`);
   console.log(`  拜访 ${visitCount}(有效 ${validCount} / 无效 ${invalidCount} / 待评定 ${pendingCount}),签到 ${await prisma.checkIn.count()}(地点异常 ${mismatchCount})`);
-  console.log(`  样品事务 ${await prisma.sampleTransaction.count()},周计划 ${await prisma.tourPlan.count()},月度计划 ${await prisma.cyclePlan.count()},客户策略 ${await prisma.accountPlan.count()},会议 ${await prisma.medEvent.count()},指标 ${await prisma.target.count()}`);
+  console.log(`  样品事务 ${await prisma.sampleTransaction.count()},周计划 ${await prisma.tourPlan.count()},月度计划 ${await prisma.cyclePlan.count()},客户策略 ${await prisma.accountPlan.count()},销售结果 ${await prisma.salesResult.count()},会议 ${await prisma.medEvent.count()},指标 ${await prisma.target.count()}`);
 }
 
 main()

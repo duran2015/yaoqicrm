@@ -39,6 +39,8 @@ model Employee {
   ownedAccountPlans   AccountPlan[]        @relation("AccountPlanOwner")
   createdAccountPlans AccountPlan[]        @relation("AccountPlanCreator")
   accountMilestones   AccountMilestone[]   @relation("AccountMilestoneOwner")
+  salesResults        SalesResult[]
+  salesImportBatches  SalesImportBatch[]
 }
 
 // 五级部门树(行政组织,独立于 Territory 辖区):
@@ -130,6 +132,7 @@ model Hco {
   tierHistories    CustomerTierHistory[]
   followUpTasks    FollowUpTask[]
   accountPlans     AccountPlan[]
+  salesResults     SalesResult[]
 }
 
 // 医生 HCP
@@ -203,6 +206,7 @@ model Product {
   targets             Target[]
   hcoProducts         HcoProduct[]
   accountPlanProducts AccountPlanProduct[]
+  salesResults         SalesResult[]
 }
 
 // 拜访记录 DCR(最核心事实表)
@@ -512,6 +516,45 @@ model Target {
   period      String // 如 "2026-07"
   visitTarget Int // 拜访次数目标
   salesTarget Float? // 销售金额目标(元)
+}
+
+// 月度销售结果事实：月份 × 产品 × HCO × 代表
+model SalesResult {
+  id                   String            @id @default(cuid())
+  month                DateTime
+  productId            String
+  product              Product           @relation(fields: [productId], references: [id])
+  hcoId                String
+  hco                  Hco               @relation(fields: [hcoId], references: [id])
+  employeeId           String
+  employee             Employee          @relation(fields: [employeeId], references: [id])
+  targetAmountCents    Int
+  actualAmountCents    Int
+  targetQuantity       Int
+  actualQuantity       Int
+  importBatchId        String?
+  importBatch          SalesImportBatch? @relation(fields: [importBatchId], references: [id])
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@unique([month, productId, hcoId, employeeId])
+  @@index([month])
+}
+
+model SalesImportBatch {
+  id            String        @id @default(cuid())
+  fileName      String
+  importedById  String
+  importedBy    Employee      @relation(fields: [importedById], references: [id])
+  status        String
+  totalRows     Int
+  successRows   Int
+  failedRows    Int
+  errorSummary  String?
+  results       SalesResult[]
+  createdAt     DateTime      @default(now())
+
+  @@index([createdAt])
 }
 
 // ==================== 客融CRM 档案体系扩展(第三阶段) ====================
