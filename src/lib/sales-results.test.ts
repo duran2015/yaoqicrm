@@ -9,6 +9,7 @@ import {
   monthOverMonth,
   parseSalesCsv,
   parseSalesMonth,
+  salesScopeParams,
   summarizeSalesRows,
   yuanToCents,
 } from "./sales-results";
@@ -97,4 +98,9 @@ test("formats sales presentation values without inventing zero-baseline growth",
   assert.equal(formatSalesAttainment(0.875), "87.5%");
   assert.equal(formatSalesMom({ kind: "NEW", value: null }), "新增");
   assert.equal(formatSalesMom({ kind: "RATE", value: -0.1 }), "-10.0%");
+});
+
+test("binds sales summaries to personal or manager scope", () => {
+  assert.deepEqual(salesScopeParams({ id: "mr-1", role: "MR" }), { employeeId: "mr-1" });
+  assert.deepEqual(salesScopeParams({ id: "asm-1", role: "ASM" }), { managerId: "asm-1" });
 });

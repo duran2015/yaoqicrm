@@ -92,6 +92,10 @@ export function formatSalesMom(value: MonthOverMonth | null) {
   return value.kind === "NEW" ? "新增" : `${(value.value * 100).toFixed(1)}%`;
 }
 
+export function salesScopeParams(employee: { id: string; role: string }) {
+  return employee.role === "MR" ? { employeeId: employee.id } : { managerId: employee.id };
+}
+
 function quantity(value: unknown) {
   const text = typeof value === "string" ? value.trim() : String(value ?? "");
   return /^\d+$/.test(text) && Number.isSafeInteger(Number(text)) ? Number(text) : null;

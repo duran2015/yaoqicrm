@@ -7,6 +7,7 @@ import { useUser } from "@/lib/context";
 import type { CoachingAction } from "@/lib/types";
 import { fmtDate } from "@/lib/utils";
 import { Badge, Button, Card, Dialog, Empty, ErrorBox, Field, Input, Loading, Notice, PageHeader, Select, Textarea } from "@/components/ui";
+import { SalesSummary } from "@/components/sales-summary";
 
 interface Workbench {
   counts: Record<string, number>;
@@ -111,6 +112,7 @@ export default function ManagerPage() {
       {loading && <Loading text="正在汇总团队待办…" />}
       {data && (
         <div className="space-y-6">
+          <SalesSummary employee={current} title="7 月团队销售结果" />
           <div className="grid gap-3 md:grid-cols-5">
             {cards.map(([label, count, href]) => (
               <a key={label} href={href} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm hover:border-emerald-300">
