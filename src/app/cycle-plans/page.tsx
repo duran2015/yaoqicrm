@@ -59,6 +59,7 @@ export default function CyclePlansPage() {
   if (!current) return null;
 
   async function createPlan() {
+    if (!current) return;
     setCreating(true);
     setError(null);
     try {

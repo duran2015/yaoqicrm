@@ -18,9 +18,16 @@ interface Workbench {
   employees: Array<{ id: string; name: string; role: string }>;
 }
 
+interface CycleCoverage {
+  summary: { targetVisits: number; completedVisits: number; achievementRate: number; uncoveredCustomers: number; laggingEmployees: number };
+  employees: Array<{ employeeId: string; employeeName: string; targetVisits: number; completedVisits: number; achievementRate: number; uncoveredCustomers: number }>;
+  priorityUncovered: Array<{ id: string; employee: { id: string; name: string }; hcp: { id: string; name: string; hco?: { name: string } | null }; tier: string; remainingVisits: number }>;
+}
+
 export default function ManagerPage() {
   const { current } = useUser();
   const [data, setData] = useState<Workbench | null>(null);
+  const [cycleCoverage, setCycleCoverage] = useState<CycleCoverage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -34,8 +41,11 @@ export default function ManagerPage() {
   const load = useCallback(() => {
     if (!current) return;
     setLoading(true);
-    apiGet<Workbench>("/api/manager/workbench", { managerId: current.id })
-      .then((res) => { setData(res); setError(null); })
+    Promise.all([
+      apiGet<Workbench>("/api/manager/workbench", { managerId: current.id }),
+      apiGet<CycleCoverage>("/api/cycle-plans/team", { managerId: current.id, month: "2026-07" }),
+    ])
+      .then(([res, coverage]) => { setData(res); setCycleCoverage(coverage); setError(null); })
       .catch((e) => setError(e instanceof Error ? e.message : "加载失败"))
       .finally(() => setLoading(false));
   }, [current]);
@@ -100,6 +110,53 @@ export default function ManagerPage() {
               </a>
             ))}
           </div>
+
+          {cycleCoverage && (
+            <section id="cycle-coverage">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-700">7 月团队客户覆盖</h2>
+                <Link href="/cycle-plans" className="text-xs text-emerald-700 hover:underline">进入月度覆盖</Link>
+              </div>
+              <div className="mb-3 grid gap-3 md:grid-cols-4">
+                {[
+                  ["团队达成率", `${Math.round(cycleCoverage.summary.achievementRate * 100)}%`],
+                  ["目标拜访", cycleCoverage.summary.targetVisits],
+                  ["未覆盖客户", cycleCoverage.summary.uncoveredCustomers],
+                  ["明显落后人员", cycleCoverage.summary.laggingEmployees],
+                ].map(([label, value]) => (
+                  <Card key={label} className="p-4"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 text-xl font-semibold text-slate-900">{value}</div></Card>
+                ))}
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                <Card className="p-4">
+                  <div className="mb-3 text-xs font-semibold text-slate-600">代表达成情况</div>
+                  {!cycleCoverage.employees.length ? <Empty text="本月尚未生成团队计划" /> : (
+                    <div className="space-y-3">
+                      {cycleCoverage.employees.map((employee) => (
+                        <div key={employee.employeeId}>
+                          <div className="mb-1 flex justify-between text-xs"><span className="font-medium text-slate-700">{employee.employeeName}</span><span>{Math.round(employee.achievementRate * 100)}% · 未覆盖 {employee.uncoveredCustomers}</span></div>
+                          <div className="h-2 overflow-hidden rounded bg-slate-100"><div className="h-full bg-emerald-500" style={{ width: `${Math.min(employee.achievementRate * 100, 100)}%` }} /></div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+                <Card className="p-4">
+                  <div className="mb-3 text-xs font-semibold text-slate-600">A/B 级未覆盖客户</div>
+                  {!cycleCoverage.priorityUncovered.length ? <Empty text="重点客户均已覆盖" /> : (
+                    <div className="space-y-2">
+                      {cycleCoverage.priorityUncovered.slice(0, 8).map((item) => (
+                        <div key={item.id} className="flex items-center justify-between text-xs">
+                          <span><Badge tone={item.tier === "A" ? "red" : "amber"}>{item.tier}</Badge><span className="ml-2 font-medium text-slate-700">{item.hcp.name}</span><span className="ml-1 text-slate-400">· {item.employee.name}</span></span>
+                          <span className="text-slate-500">差 {item.remainingVisits} 次</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
+            </section>
+          )}
 
           <section id="exceptions">
             <h2 className="mb-3 text-sm font-semibold text-slate-700">异常签到</h2>
