@@ -9,39 +9,42 @@ datasource db {
 
 // 销售组织:医药代表→地区经理→大区经理
 model Employee {
-  id                  String               @id @default(cuid())
-  employeeCode        String               @unique // 工号,如 "YG1001"
-  name                String
-  role                String // MR | ASM | RSM | ADMIN
-  division            String // 事业部,如 "肿瘤线" | "心血管线"
-  phone               String?
-  reportsToId         String?
-  reportsTo           Employee?            @relation("OrgTree", fields: [reportsToId], references: [id])
-  subordinates        Employee[]           @relation("OrgTree")
-  territoryId         String?
-  territory           Territory?           @relation(fields: [territoryId], references: [id])
-  departmentId        String?
-  department          Department?          @relation(fields: [departmentId], references: [id])
-  visits              Visit[]
-  receivedVisits      Visit[]              @relation("VisitReceiver")
-  evaluatedVisits     Visit[]              @relation("VisitEvaluator")
-  checkins            CheckIn[]
-  tourPlans           TourPlan[]
-  sampleTransactions  SampleTransaction[]
-  targets             Target[]
-  assignments         CustomerAssignment[]
-  kaHcos              Hco[]                @relation("KaOwner")
-  followUpTasks       FollowUpTask[]       @relation("TaskAssignee")
-  managedCoachings    CoachingAction[]     @relation("CoachingManager")
-  assignedCoachings   CoachingAction[]     @relation("CoachingEmployee")
-  cyclePlans          CyclePlan[]          @relation("CyclePlanEmployee")
-  createdCyclePlans   CyclePlan[]          @relation("CyclePlanCreator")
-  ownedAccountPlans   AccountPlan[]        @relation("AccountPlanOwner")
-  createdAccountPlans AccountPlan[]        @relation("AccountPlanCreator")
-  accountMilestones   AccountMilestone[]   @relation("AccountMilestoneOwner")
-  salesResults        SalesResult[]
-  salesImportBatches  SalesImportBatch[]
-  mcpOperations       McpOperation[]
+  id                   String               @id @default(cuid())
+  employeeCode         String               @unique // 工号,如 "YG1001"
+  name                 String
+  role                 String // MR | ASM | RSM | ADMIN
+  division             String // 事业部,如 "肿瘤线" | "心血管线"
+  phone                String?
+  reportsToId          String?
+  reportsTo            Employee?            @relation("OrgTree", fields: [reportsToId], references: [id])
+  subordinates         Employee[]           @relation("OrgTree")
+  territoryId          String?
+  territory            Territory?           @relation(fields: [territoryId], references: [id])
+  departmentId         String?
+  department           Department?          @relation(fields: [departmentId], references: [id])
+  visits               Visit[]
+  receivedVisits       Visit[]              @relation("VisitReceiver")
+  evaluatedVisits      Visit[]              @relation("VisitEvaluator")
+  checkins             CheckIn[]
+  tourPlans            TourPlan[]
+  sampleTransactions   SampleTransaction[]
+  targets              Target[]
+  assignments          CustomerAssignment[]
+  kaHcos               Hco[]                @relation("KaOwner")
+  followUpTasks        FollowUpTask[]       @relation("TaskAssignee")
+  managedCoachings     CoachingAction[]     @relation("CoachingManager")
+  assignedCoachings    CoachingAction[]     @relation("CoachingEmployee")
+  cyclePlans           CyclePlan[]          @relation("CyclePlanEmployee")
+  createdCyclePlans    CyclePlan[]          @relation("CyclePlanCreator")
+  ownedAccountPlans    AccountPlan[]        @relation("AccountPlanOwner")
+  createdAccountPlans  AccountPlan[]        @relation("AccountPlanCreator")
+  accountMilestones    AccountMilestone[]   @relation("AccountMilestoneOwner")
+  salesResults         SalesResult[]
+  salesImportBatches   SalesImportBatch[]
+  mcpOperations        McpOperation[]
+  requestedCollections CollectionRun[]      @relation("CollectionRequester")
+  reviewedIntelligence SalesIntelligence[]  @relation("IntelligenceReviewer")
+  intelligenceUsages   IntelligenceUsage[]
 }
 
 // 五级部门树(行政组织,独立于 Territory 辖区):
@@ -193,6 +196,7 @@ model Hcp {
   cyclePlanItems      CyclePlanItem[]
   accountStakeholders AccountStakeholder[]
   affiliations        HcpAffiliation[]
+  intelligenceUsages  IntelligenceUsage[]
 }
 
 // HCP 多机构、多科室任职；Hcp 上的 hcoId/specialty/title/adminDuty 为当前主要任职兼容字段
@@ -218,7 +222,7 @@ model HcpAffiliation {
 
 // 产品主数据:品牌→分子→治疗领域
 model Product {
-  id                  String               @id @default(cuid())
+  id                  String                @id @default(cuid())
   brand               String // 商品名
   molecule            String // 通用名/分子
   therapeuticCategory String // 治疗领域
@@ -232,49 +236,53 @@ model Product {
   accountPlanProducts AccountPlanProduct[]
   salesResults        SalesResult[]
   materials           ProductMaterial[]
+  intelligenceLinks   IntelligenceProduct[]
+  intelligenceUsages  IntelligenceUsage[]
+  intelligenceRuns    CollectionRun[]
 }
 
 // 拜访记录 DCR(最核心事实表)
 model Visit {
-  id              String               @id @default(cuid())
-  employeeId      String
-  employee        Employee             @relation(fields: [employeeId], references: [id])
-  hcpId           String?
-  hcp             Hcp?                 @relation(fields: [hcpId], references: [id])
-  hcoId           String?
-  hco             Hco?                 @relation(fields: [hcoId], references: [id])
-  visitDate       DateTime
-  type            String // FACE_TO_FACE | PHONE | CONFERENCE | JOINT(协同拜访)
-  purpose         String? // 拜访目的(旧自由文本字段,向后兼容保留)
-  purposes        String? // 结构化拜访目的,逗号分隔多选:产品信息传递|临床信息沟通|市场现状调研|学术会议沟通|其他
-  outcome         String? // 结果,如 "同意试用" | "需进一步跟进"
-  duration        Int? // 分钟
-  notes           String? // 原始记录(语音速记/文字)
-  summary         String? // 人工拜访总结(与 aiSummary 并存,真实导出数据为两个独立字段)
-  nextStep        String? // 下一步计划
-  aiSummary       String? // AI 富化:摘要(预留给 AI 工具写)
-  aiSentiment     String? // AI 富化:情感倾向 POSITIVE|NEUTRAL|NEGATIVE
-  source          String               @default("MANUAL") // 数据来源:MANUAL | AI | IMPORT
-  status          String               @default("SUBMITTED") // DRAFT | SUBMITTED
-  receiverId      String? // 报告接收人(上级),默认=填写人的直属上级
-  receiver        Employee?            @relation("VisitReceiver", fields: [receiverId], references: [id])
+  id                 String               @id @default(cuid())
+  employeeId         String
+  employee           Employee             @relation(fields: [employeeId], references: [id])
+  hcpId              String?
+  hcp                Hcp?                 @relation(fields: [hcpId], references: [id])
+  hcoId              String?
+  hco                Hco?                 @relation(fields: [hcoId], references: [id])
+  visitDate          DateTime
+  type               String // FACE_TO_FACE | PHONE | CONFERENCE | JOINT(协同拜访)
+  purpose            String? // 拜访目的(旧自由文本字段,向后兼容保留)
+  purposes           String? // 结构化拜访目的,逗号分隔多选:产品信息传递|临床信息沟通|市场现状调研|学术会议沟通|其他
+  outcome            String? // 结果,如 "同意试用" | "需进一步跟进"
+  duration           Int? // 分钟
+  notes              String? // 原始记录(语音速记/文字)
+  summary            String? // 人工拜访总结(与 aiSummary 并存,真实导出数据为两个独立字段)
+  nextStep           String? // 下一步计划
+  aiSummary          String? // AI 富化:摘要(预留给 AI 工具写)
+  aiSentiment        String? // AI 富化:情感倾向 POSITIVE|NEUTRAL|NEGATIVE
+  source             String               @default("MANUAL") // 数据来源:MANUAL | AI | IMPORT
+  status             String               @default("SUBMITTED") // DRAFT | SUBMITTED
+  receiverId         String? // 报告接收人(上级),默认=填写人的直属上级
+  receiver           Employee?            @relation("VisitReceiver", fields: [receiverId], references: [id])
   // 有效性评定(经理对接收到的拜访做有效/无效反馈)
-  validityStatus  String               @default("PENDING") // PENDING=未反馈 | VALID=有效 | INVALID=无效
-  evaluatedById   String?
-  evaluatedBy     Employee?            @relation("VisitEvaluator", fields: [evaluatedById], references: [id])
-  evaluatedAt     DateTime?
-  invalidReason   String? // 无效原因:重复 | 内容过短 | 签到地点不对 | 结果未体现 …
-  jointWithId     String? // 协同拜访的同事
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  products        VisitProduct[]
-  samples         SampleTransaction[]
-  checkins        CheckIn[]
-  tourPlanItem    TourPlanItem?        @relation("PlanItemVisit")
-  sourceTasks     FollowUpTask[]       @relation("TaskSourceVisit")
-  followUpTasks   FollowUpTask[]       @relation("TaskFollowUpVisit")
-  materialUsages  VisitMaterialUsage[]
-  coachingActions CoachingAction[]
+  validityStatus     String               @default("PENDING") // PENDING=未反馈 | VALID=有效 | INVALID=无效
+  evaluatedById      String?
+  evaluatedBy        Employee?            @relation("VisitEvaluator", fields: [evaluatedById], references: [id])
+  evaluatedAt        DateTime?
+  invalidReason      String? // 无效原因:重复 | 内容过短 | 签到地点不对 | 结果未体现 …
+  jointWithId        String? // 协同拜访的同事
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  products           VisitProduct[]
+  samples            SampleTransaction[]
+  checkins           CheckIn[]
+  tourPlanItem       TourPlanItem?        @relation("PlanItemVisit")
+  sourceTasks        FollowUpTask[]       @relation("TaskSourceVisit")
+  followUpTasks      FollowUpTask[]       @relation("TaskFollowUpVisit")
+  materialUsages     VisitMaterialUsage[]
+  coachingActions    CoachingAction[]
+  intelligenceUsages IntelligenceUsage[]
 }
 
 // 拜访签到(真实导出数据每条拜访绑定一条签到)
@@ -744,4 +752,158 @@ model McpOperation {
   @@unique([employeeId, toolName, idempotencyKey])
   @@index([createdAt])
   @@index([employeeId, status, createdAt])
+}
+
+// 自动采集来源配置；configJson 只保存公开适配参数，不保存密钥
+model IntelligenceSource {
+  id              String              @id @default(cuid())
+  name            String
+  baseUrl         String
+  sourceType      String // OFFICIAL | PROFESSIONAL | COMPANY | MEDIA | SEARCH
+  collectionType  String // RSS | LIST_PAGE | SEARCH | MANUAL
+  enabled         Boolean             @default(true)
+  trustLevel      String // AUTHORITATIVE | TRUSTED | REFERENCE
+  topicTypes      String
+  configJson      String?
+  lastCollectedAt DateTime?
+  collectionRuns  CollectionRun[]
+  intelligence    SalesIntelligence[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([baseUrl, collectionType])
+  @@index([enabled, sourceType])
+}
+
+model CollectionRun {
+  id             String              @id @default(cuid())
+  triggerType    String // SCHEDULED | MANUAL | PRODUCT_REFRESH | AGENT_SEARCH
+  sourceId       String?
+  source         IntelligenceSource? @relation(fields: [sourceId], references: [id])
+  productId      String?
+  product        Product?            @relation(fields: [productId], references: [id])
+  status         String              @default("PENDING")
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  foundCount     Int                 @default(0)
+  newCount       Int                 @default(0)
+  updatedCount   Int                 @default(0)
+  failedCount    Int                 @default(0)
+  errorSummary   String?
+  requestedById  String?
+  requestedBy    Employee?           @relation("CollectionRequester", fields: [requestedById], references: [id])
+  idempotencyKey String?
+  createdAt      DateTime            @default(now())
+
+  @@unique([requestedById, triggerType, idempotencyKey])
+  @@index([status, createdAt])
+  @@index([sourceId, createdAt])
+  @@index([productId, createdAt])
+}
+
+model CompetitorProduct {
+  id                  String                   @id @default(cuid())
+  name                String
+  molecule            String?
+  company             String?
+  therapeuticCategory String
+  indications         String?
+  websiteUrl          String?
+  active              Boolean                  @default(true)
+  intelligenceLinks   IntelligenceCompetitor[]
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  @@unique([name, company])
+  @@index([therapeuticCategory, active])
+}
+
+model SalesIntelligence {
+  id                 String                        @id @default(cuid())
+  type               String
+  title              String
+  summary            String
+  contentExcerpt     String?
+  sourceId           String?
+  source             IntelligenceSource?           @relation(fields: [sourceId], references: [id])
+  sourceName         String
+  sourceUrl          String
+  canonicalUrl       String
+  publishedAt        DateTime?
+  collectedAt        DateTime                      @default(now())
+  validFrom          DateTime?
+  validUntil         DateTime?
+  verificationStatus String                        @default("PENDING_REVIEW")
+  confidence         String                        @default("MEDIUM")
+  priority           String                        @default("NORMAL")
+  contentHash        String
+  version            Int                           @default(1)
+  supersedesId       String?
+  supersedes         SalesIntelligence?            @relation("IntelligenceVersions", fields: [supersedesId], references: [id])
+  newerVersions      SalesIntelligence[]           @relation("IntelligenceVersions")
+  reviewedById       String?
+  reviewedBy         Employee?                     @relation("IntelligenceReviewer", fields: [reviewedById], references: [id])
+  reviewedAt         DateTime?
+  reviewNote         String?
+  products           IntelligenceProduct[]
+  therapeuticAreas   IntelligenceTherapeuticArea[]
+  competitors        IntelligenceCompetitor[]
+  usages             IntelligenceUsage[]
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+
+  @@unique([canonicalUrl, version])
+  @@index([contentHash])
+  @@index([type, verificationStatus, publishedAt])
+  @@index([validUntil])
+}
+
+model IntelligenceProduct {
+  intelligenceId String
+  intelligence   SalesIntelligence @relation(fields: [intelligenceId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([intelligenceId, productId])
+  @@index([productId])
+}
+
+model IntelligenceTherapeuticArea {
+  intelligenceId String
+  intelligence   SalesIntelligence @relation(fields: [intelligenceId], references: [id], onDelete: Cascade)
+  name           String
+
+  @@id([intelligenceId, name])
+  @@index([name])
+}
+
+model IntelligenceCompetitor {
+  intelligenceId String
+  intelligence   SalesIntelligence @relation(fields: [intelligenceId], references: [id], onDelete: Cascade)
+  competitorId   String
+  competitor     CompetitorProduct @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@id([intelligenceId, competitorId])
+  @@index([competitorId])
+}
+
+model IntelligenceUsage {
+  id             String            @id @default(cuid())
+  intelligenceId String
+  intelligence   SalesIntelligence @relation(fields: [intelligenceId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  hcpId          String?
+  hcp            Hcp?              @relation(fields: [hcpId], references: [id], onDelete: SetNull)
+  productId      String?
+  product        Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  visitId        String?
+  visit          Visit?            @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  usageType      String // VIEWED | AGENT_CITED | VISIT_PREPARED
+  usedAt         DateTime          @default(now())
+
+  @@index([employeeId, usedAt])
+  @@index([intelligenceId, usageType])
+  @@index([hcpId, usedAt])
+  @@index([productId, usedAt])
 }

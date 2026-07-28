@@ -94,6 +94,38 @@ export interface Product {
   unit?: string | null;
   sampleLots?: SampleLot[];
   materials?: ProductMaterial[];
+  intelligenceLinks?: Array<{ intelligence: SalesIntelligence }>;
+}
+
+export interface SalesIntelligence {
+  id: string;
+  type: "POLICY" | "COMPETITOR" | "INDUSTRY_NEWS" | "DISEASE_KNOWLEDGE" | "PRODUCT_KNOWLEDGE";
+  title: string;
+  summary: string;
+  contentExcerpt?: string | null;
+  sourceName: string;
+  sourceUrl: string;
+  publishedAt?: string | null;
+  collectedAt: string;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  verificationStatus: "PENDING_REVIEW" | "VERIFIED" | "REJECTED" | "ARCHIVED";
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  priority: "URGENT" | "HIGH" | "NORMAL" | "LOW";
+  products?: Array<{ product: Pick<Product, "id" | "brand" | "molecule" | "therapeuticCategory"> }>;
+  therapeuticAreas?: Array<{ name: string }>;
+  competitors?: Array<{ competitor: CompetitorProduct }>;
+}
+
+export interface CompetitorProduct {
+  id: string;
+  name: string;
+  molecule?: string | null;
+  company?: string | null;
+  therapeuticCategory: string;
+  indications?: string | null;
+  websiteUrl?: string | null;
+  active: boolean;
 }
 
 export interface ProductMaterial {

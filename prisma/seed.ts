@@ -47,6 +47,14 @@ function genPurposes(): string[] {
 
 async function main() {
   console.log("清空旧数据...");
+  await prisma.intelligenceUsage.deleteMany();
+  await prisma.intelligenceCompetitor.deleteMany();
+  await prisma.intelligenceTherapeuticArea.deleteMany();
+  await prisma.intelligenceProduct.deleteMany();
+  await prisma.salesIntelligence.deleteMany();
+  await prisma.collectionRun.deleteMany();
+  await prisma.competitorProduct.deleteMany();
+  await prisma.intelligenceSource.deleteMany();
   await prisma.mcpOperation.deleteMany();
   await prisma.visitMaterialUsage.deleteMany();
   await prisma.productMaterial.deleteMany();
@@ -280,10 +288,10 @@ async function main() {
     { brand: "脉舒平", molecule: "瑞舒伐他汀", therapeuticCategory: "血脂异常", division: "心血管线", price: 78, unit: "10mg*28片/盒" },
     { brand: "康脉宁", molecule: "替格瑞洛", therapeuticCategory: "抗血小板治疗", division: "心血管线", price: 168, unit: "90mg*14片/盒" },
   ];
-  const products: { id: string; brand: string; molecule: string; division: string; price: number }[] = [];
+  const products: { id: string; brand: string; molecule: string; therapeuticCategory: string; division: string; price: number }[] = [];
   for (const p of productDefs) {
     const rec = await prisma.product.create({ data: p });
-    products.push({ id: rec.id, brand: rec.brand, molecule: rec.molecule, division: rec.division, price: rec.price ?? 0 });
+    products.push({ id: rec.id, brand: rec.brand, molecule: rec.molecule, therapeuticCategory: rec.therapeuticCategory, division: rec.division, price: rec.price ?? 0 });
   }
 
   // ---------- 样品批次:每个产品 1-2 个 ----------
@@ -903,11 +911,126 @@ async function main() {
     }
   }
 
+  // ---------- 销售情报与共享知识 ----------
+  console.log("创建销售情报...");
+  const officialSource = await prisma.intelligenceSource.create({
+    data: {
+      name: "国家医保局",
+      baseUrl: "https://www.nhsa.gov.cn/",
+      sourceType: "OFFICIAL",
+      collectionType: "LIST_PAGE",
+      trustLevel: "AUTHORITATIVE",
+      topicTypes: "POLICY",
+      configJson: JSON.stringify({ demo: true }),
+      lastCollectedAt: REF_NOW,
+    },
+  });
+  const mediaSource = await prisma.intelligenceSource.create({
+    data: {
+      name: "医药行业媒体演示源",
+      baseUrl: "https://example.com/pharma-news",
+      sourceType: "MEDIA",
+      collectionType: "RSS",
+      trustLevel: "REFERENCE",
+      topicTypes: "INDUSTRY_NEWS,COMPETITOR",
+      configJson: JSON.stringify({ demo: true }),
+      lastCollectedAt: REF_NOW,
+    },
+  });
+  const focusProduct = products[0];
+  const competitor = await prisma.competitorProduct.create({
+    data: {
+      name: "竞品A",
+      molecule: "对照分子A",
+      company: "示例药企",
+      therapeuticCategory: focusProduct.therapeuticCategory,
+      indications: "与重点产品相关的公开适应症演示信息",
+      websiteUrl: "https://example.com/competitor-a",
+    },
+  });
+  const intelligenceScenarios = [
+    {
+      type: "POLICY",
+      title: `${focusProduct.therapeuticCategory}医保支付政策更新`,
+      summary: "官方政策演示摘要，用于说明销售如何在拜访前理解准入环境变化。",
+      source: officialSource,
+      path: "demo-policy",
+      verificationStatus: "VERIFIED",
+      confidence: "HIGH",
+      priority: "HIGH",
+    },
+    {
+      type: "COMPETITOR",
+      title: `${competitor.name}公开适应症动态`,
+      summary: "竞品公开动态演示摘要，核验前只能作为内部线索。",
+      source: mediaSource,
+      path: "demo-competitor",
+      verificationStatus: "PENDING_REVIEW",
+      confidence: "MEDIUM",
+      priority: "NORMAL",
+    },
+    {
+      type: "INDUSTRY_NEWS",
+      title: `${focusProduct.therapeuticCategory}市场关注度变化`,
+      summary: "行业媒体演示信息，始终保留原始来源并等待人工核验。",
+      source: mediaSource,
+      path: "demo-market-news",
+      verificationStatus: "PENDING_REVIEW",
+      confidence: "LOW",
+      priority: "NORMAL",
+    },
+    {
+      type: "DISEASE_KNOWLEDGE",
+      title: `${focusProduct.therapeuticCategory}患者分层基础知识`,
+      summary: "供同一 SKU 团队共享的疾病知识要点，不作为诊疗建议。",
+      source: officialSource,
+      path: "demo-disease-knowledge",
+      verificationStatus: "VERIFIED",
+      confidence: "HIGH",
+      priority: "NORMAL",
+    },
+    {
+      type: "PRODUCT_KNOWLEDGE",
+      title: `${focusProduct.brand}产品知识卡`,
+      summary: "目标患者、核心证据和常见问题的内部准备摘要，批准材料另行展示。",
+      source: officialSource,
+      path: "demo-product-knowledge",
+      verificationStatus: "VERIFIED",
+      confidence: "HIGH",
+      priority: "NORMAL",
+    },
+  ];
+  for (const [index, item] of intelligenceScenarios.entries()) {
+    const sourceUrl = new URL(item.path, item.source.baseUrl).toString();
+    await prisma.salesIntelligence.create({
+      data: {
+        type: item.type,
+        title: item.title,
+        summary: item.summary,
+        contentExcerpt: item.summary,
+        sourceId: item.source.id,
+        sourceName: item.source.name,
+        sourceUrl,
+        canonicalUrl: sourceUrl,
+        publishedAt: day(-index - 1),
+        collectedAt: REF_NOW,
+        verificationStatus: item.verificationStatus,
+        confidence: item.confidence,
+        priority: item.priority,
+        contentHash: `demo-intelligence-${index}`,
+        products: { create: { productId: focusProduct.id } },
+        therapeuticAreas: { create: { name: focusProduct.therapeuticCategory } },
+        competitors: item.type === "COMPETITOR" ? { create: { competitorId: competitor.id } } : undefined,
+      },
+    });
+  }
+
   console.log("✅ 种子数据完成:");
   console.log(`  员工 ${await prisma.employee.count()},部门 ${await prisma.department.count()},辖区 ${await prisma.territory.count()},机构 ${await prisma.hco.count()}`);
   console.log(`  HCP ${await prisma.hcp.count()},产品 ${await prisma.product.count()},批准资料 ${await prisma.productMaterial.count()},批次 ${await prisma.sampleLot.count()}`);
   console.log(`  拜访 ${visitCount}(有效 ${validCount} / 无效 ${invalidCount} / 待评定 ${pendingCount}),签到 ${await prisma.checkIn.count()}(地点异常 ${mismatchCount})`);
   console.log(`  样品事务 ${await prisma.sampleTransaction.count()},周计划 ${await prisma.tourPlan.count()},月度计划 ${await prisma.cyclePlan.count()},客户策略 ${await prisma.accountPlan.count()},销售结果 ${await prisma.salesResult.count()},会议 ${await prisma.medEvent.count()},指标 ${await prisma.target.count()}`);
+  console.log(`  销售情报 ${await prisma.salesIntelligence.count()},情报来源 ${await prisma.intelligenceSource.count()},竞品 ${await prisma.competitorProduct.count()}`);
 }
 
 main()
