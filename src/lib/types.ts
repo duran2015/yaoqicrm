@@ -440,6 +440,7 @@ export type HcoDetail = Hco &
     hospitalProducts: HcoProductItem[];
     examResults: HcoExamResult[];
     hcps: Hcp[];
+    accountPlanSummary?: AccountPlan | null;
     _count?: { visits: number };
   };
 

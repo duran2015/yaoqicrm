@@ -24,10 +24,18 @@ interface CycleCoverage {
   priorityUncovered: Array<{ id: string; employee: { id: string; name: string }; hcp: { id: string; name: string; hco?: { name: string } | null }; tier: string; remainingVisits: number }>;
 }
 
+interface AccountStrategy {
+  summary: { planCount: number; averageProgress: number; overdueMilestones: number; uncoveredDecisionMakers: number; atRiskPlans: number };
+  plans: Array<{ id: string; hco: { id: string; name: string }; owner: { id: string; name: string }; progress: number; overdue: number; uncoveredDecisionMakers: number }>;
+  overdueMilestones: Array<{ id: string; title: string; dueDate: string; planId: string; hco: { name: string }; owner: { name: string } }>;
+  uncoveredDecisionMakers: Array<{ id: string; planId: string; hco: { name: string }; owner: { name: string }; hcp: { name: string }; attitude: string }>;
+}
+
 export default function ManagerPage() {
   const { current } = useUser();
   const [data, setData] = useState<Workbench | null>(null);
   const [cycleCoverage, setCycleCoverage] = useState<CycleCoverage | null>(null);
+  const [accountStrategy, setAccountStrategy] = useState<AccountStrategy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -44,8 +52,9 @@ export default function ManagerPage() {
     Promise.all([
       apiGet<Workbench>("/api/manager/workbench", { managerId: current.id }),
       apiGet<CycleCoverage>("/api/cycle-plans/team", { managerId: current.id, month: "2026-07" }),
+      apiGet<AccountStrategy>("/api/account-plans/team", { managerId: current.id, year: 2026 }),
     ])
-      .then(([res, coverage]) => { setData(res); setCycleCoverage(coverage); setError(null); })
+      .then(([res, coverage, strategy]) => { setData(res); setCycleCoverage(coverage); setAccountStrategy(strategy); setError(null); })
       .catch((e) => setError(e instanceof Error ? e.message : "加载失败"))
       .finally(() => setLoading(false));
   }, [current]);
@@ -154,6 +163,24 @@ export default function ManagerPage() {
                     </div>
                   )}
                 </Card>
+              </div>
+            </section>
+          )}
+
+          {accountStrategy && (
+            <section id="account-strategy">
+              <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold text-slate-700">战略客户计划</h2><Link href="/account-plans" className="text-xs text-emerald-700 hover:underline">进入客户策略</Link></div>
+              <div className="mb-3 grid gap-3 md:grid-cols-4">
+                {[
+                  ["计划数量", accountStrategy.summary.planCount],
+                  ["平均进度", `${Math.round(accountStrategy.summary.averageProgress * 100)}%`],
+                  ["逾期里程碑", accountStrategy.summary.overdueMilestones],
+                  ["风险计划", accountStrategy.summary.atRiskPlans],
+                ].map(([label, value]) => <Card key={label} className="p-4"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 text-xl font-semibold text-slate-900">{value}</div></Card>)}
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                <Card className="p-4"><div className="mb-3 text-xs font-semibold text-slate-600">需要介入的计划</div>{!accountStrategy.plans.filter((item) => item.overdue || item.uncoveredDecisionMakers).length ? <Empty text="暂无风险计划" /> : <div className="space-y-2">{accountStrategy.plans.filter((item) => item.overdue || item.uncoveredDecisionMakers).map((item) => <Link key={item.id} href={`/account-plans/${item.id}`} className="flex justify-between text-xs hover:text-emerald-700"><span>{item.hco.name} · {item.owner.name}</span><span>逾期 {item.overdue} · 决策人未覆盖 {item.uncoveredDecisionMakers}</span></Link>)}</div>}</Card>
+                <Card className="p-4"><div className="mb-3 text-xs font-semibold text-slate-600">逾期里程碑</div>{!accountStrategy.overdueMilestones.length ? <Empty text="暂无逾期里程碑" /> : <div className="space-y-2">{accountStrategy.overdueMilestones.slice(0, 8).map((item) => <Link key={item.id} href={`/account-plans/${item.planId}`} className="flex justify-between text-xs hover:text-emerald-700"><span>{item.hco.name} · {item.title}</span><span>{fmtDate(item.dueDate)}</span></Link>)}</div>}</Card>
               </div>
             </section>
           )}

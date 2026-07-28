@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { err } from "@/lib/api";
 import { assignmentInclude } from "@/lib/customer";
 import { maskHcp } from "@/lib/mask";
+import { accountPlanInclude, enrichAccountPlan } from "@/lib/account-plan-data";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -28,5 +29,10 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     },
   });
   if (!hco) return err("机构不存在", 404);
-  return NextResponse.json({ ...hco, hcps: hco.hcps.map(maskHcp) });
+  const accountPlan = await prisma.accountPlan.findUnique({
+    where: { hcoId_year: { hcoId: id, year: 2026 } },
+    include: accountPlanInclude,
+  });
+  const accountPlanSummary = accountPlan ? await enrichAccountPlan(accountPlan) : null;
+  return NextResponse.json({ ...hco, hcps: hco.hcps.map(maskHcp), accountPlanSummary });
 }

@@ -7,7 +7,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { apiGet } from "@/lib/api-client";
 import { HCO_TYPE_LABELS } from "@/lib/constants";
 import type { HcoDetail } from "@/lib/types";
-import { Badge, Card, Empty, ErrorBox, ExamGradeBadge, InfoSection, Loading, PageHeader, Tabs, TierBadge } from "@/components/ui";
+import { Badge, Button, Card, Empty, ErrorBox, ExamGradeBadge, InfoSection, Loading, PageHeader, Tabs, TierBadge } from "@/components/ui";
 import { TierPanel, assignmentsText } from "@/components/customer";
 
 /** 纯 CSS 圆形印章("已认证",emerald 描边) */
@@ -113,6 +113,24 @@ export default function HcoDetailPage() {
           <VerifiedSeal />
         </div>
       </Card>
+
+      {data.isStrategic === "是" && (
+        <Card className="mb-4 border-emerald-200 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-800">2026 Account Plan</div>
+              {data.accountPlanSummary ? (
+                <div className="mt-1 text-xs text-slate-500">
+                  {data.accountPlanSummary.businessGoal} · 里程碑 {Math.round(data.accountPlanSummary.progress.progress * 100)}% · 逾期 {data.accountPlanSummary.progress.overdue} · 决策人未覆盖 {data.accountPlanSummary.uncoveredDecisionMakers}
+                </div>
+              ) : <div className="mt-1 text-xs text-slate-500">该战略客户尚未建立年度经营计划</div>}
+            </div>
+            {data.accountPlanSummary
+              ? <Link href={`/account-plans/${data.accountPlanSummary.id}`}><Button size="sm">查看客户策略</Button></Link>
+              : <Link href={`/account-plans?hcoId=${data.id}`}><Button size="sm">创建 Account Plan</Button></Link>}
+          </div>
+        </Card>
+      )}
 
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
