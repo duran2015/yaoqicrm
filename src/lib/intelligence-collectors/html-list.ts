@@ -10,9 +10,9 @@ type HtmlConfig = {
 };
 
 export function parseHtmlList(html: string, baseUrl: URL, config: HtmlConfig, limit: number) {
-  const expandedHtml = html
-    .replace(/<record>\s*<!\[CDATA\[/gi, "")
-    .replace(/\]\]>\s*<\/record>/gi, "");
+  const recordFragments = [...html.matchAll(/<record>\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*<\/record>/gi)]
+    .map((match) => match[1]);
+  const expandedHtml = recordFragments.length ? `<body>${recordFragments.join("")}</body>` : html;
   const { document } = parseHTML(expandedHtml);
   const select = (item: Element, selector: string) => item.matches(selector) ? item : item.querySelector(selector);
   return [...document.querySelectorAll(config.itemSelector)].slice(0, limit).flatMap((item) => {
