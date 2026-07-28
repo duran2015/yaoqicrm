@@ -10,6 +10,7 @@ import { fmtDate, fmtDateTime } from "@/lib/utils";
 import { Badge, Button, Card, Empty, ErrorBox, InfoSection, Loading, PageHeader, SourceBadge, Tabs, TierBadge, ValidityBadge } from "@/components/ui";
 import { TierPanel, assignmentsText } from "@/components/customer";
 import { VisitFormDialog } from "@/components/visit-form";
+import { HcpAffiliations } from "@/components/hcp-affiliations";
 
 function StatItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -142,6 +143,7 @@ export default function HcpDetailPage() {
         <>
           {/* 档案分区卡片 */}
           <div className="mb-5 space-y-4">
+            <HcpAffiliations hcpId={data.id} affiliations={data.affiliations} onChanged={load} />
             <InfoSection
               title="基础信息"
               items={[
