@@ -39,6 +39,8 @@ export interface Hco {
   tier?: string | null; // A | B | C | D,null=未分级
   address?: string | null;
   territory?: TerritoryRef | null;
+  isStrategic?: string | null;
+  kaOwner?: { id: string; name: string; role: string } | null;
   _count?: { hcps: number; visits: number };
 }
 
