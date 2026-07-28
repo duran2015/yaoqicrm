@@ -70,6 +70,7 @@ async function main() {
   await prisma.visit.deleteMany();
   await prisma.target.deleteMany();
   await prisma.customerAssignment.deleteMany();
+  await prisma.hcpAffiliation.deleteMany();
   await prisma.hcp.deleteMany();
   await prisma.hco.deleteMany();
   await prisma.product.deleteMany();
@@ -217,6 +218,43 @@ async function main() {
       division: oncSpecialties.has(specialty) ? "肿瘤线" : "心血管线",
     });
   }
+
+  console.log("创建 HCP 任职经历...");
+  for (let i = 0; i < hcps.length; i++) {
+    const [, title, specialty, , hcoIdx] = hcpDefs[i];
+    await prisma.hcpAffiliation.create({
+      data: {
+        hcpId: hcps[i].id,
+        hcoId: hcos[hcoIdx].id,
+        departmentName: specialty,
+        title,
+        adminDuty: i === 0 ? "科主任" : null,
+        isPrimary: true,
+        effectiveDate: new Date("2025-01-01T00:00:00+08:00"),
+      },
+    });
+  }
+  await prisma.hcpAffiliation.create({
+    data: {
+      hcpId: hcps[0].id,
+      hcoId: hcos[1].id,
+      departmentName: "肿瘤中心",
+      title: "特聘主任医师",
+      adminDuty: "多学科诊疗顾问",
+      effectiveDate: new Date("2026-03-01T00:00:00+08:00"),
+    },
+  });
+  await prisma.hcpAffiliation.create({
+    data: {
+      hcpId: hcps[1].id,
+      hcoId: hcos[0].id,
+      departmentName: "乳腺外科",
+      title: "副主任医师",
+      adminDuty: null,
+      effectiveDate: new Date("2022-01-01T00:00:00+08:00"),
+      endDate: new Date("2024-12-31T00:00:00+08:00"),
+    },
+  });
 
   // ---------- HCP 负责人归属:同事业部内确定性轮转 ----------
   console.log("创建客户负责人归属...");

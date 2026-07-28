@@ -133,6 +133,7 @@ model Hco {
   followUpTasks    FollowUpTask[]
   accountPlans     AccountPlan[]
   salesResults     SalesResult[]
+  hcpAffiliations  HcpAffiliation[]
 }
 
 // 医生 HCP
@@ -190,6 +191,28 @@ model Hcp {
   followUpTasks       FollowUpTask[]
   cyclePlanItems      CyclePlanItem[]
   accountStakeholders AccountStakeholder[]
+  affiliations        HcpAffiliation[]
+}
+
+// HCP 多机构、多科室任职；Hcp 上的 hcoId/specialty/title/adminDuty 为当前主要任职兼容字段
+model HcpAffiliation {
+  id             String   @id @default(cuid())
+  hcpId          String
+  hcp            Hcp      @relation(fields: [hcpId], references: [id], onDelete: Cascade)
+  hcoId          String
+  hco            Hco      @relation(fields: [hcoId], references: [id], onDelete: Restrict)
+  departmentName String
+  title          String?
+  adminDuty      String?
+  isPrimary      Boolean  @default(false)
+  effectiveDate  DateTime
+  endDate        DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([hcpId, hcoId, departmentName, effectiveDate])
+  @@index([hcpId, isPrimary])
+  @@index([hcoId])
 }
 
 // 产品主数据:品牌→分子→治疗领域
