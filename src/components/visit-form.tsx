@@ -69,6 +69,7 @@ export function VisitFormDialog({
   const [products, setProducts] = useState<Product[]>([]);
   const [checkedProducts, setCheckedProducts] = useState<Record<string, boolean>>({});
   const [feedbacks, setFeedbacks] = useState<Record<string, string>>({});
+  const [checkedMaterials, setCheckedMaterials] = useState<Record<string, boolean>>({});
 
   // 样品与库存
   const [inventory, setInventory] = useState<InventoryProduct[]>([]);
@@ -97,6 +98,7 @@ export function VisitFormDialog({
     setWithCheckin(true);
     setCheckedProducts({});
     setFeedbacks({});
+    setCheckedMaterials({});
     setSampleRows([]);
     setError(null);
     setHcpQuery("");
@@ -230,6 +232,7 @@ export function VisitFormDialog({
         products: products
           .filter((p) => checkedProducts[p.id])
           .map((p) => ({ productId: p.id, feedback: feedbacks[p.id]?.trim() || undefined })),
+        materialIds: Object.entries(checkedMaterials).filter(([, checked]) => checked).map(([id]) => id),
         samples,
       });
       onSuccess?.(visit);
@@ -460,17 +463,20 @@ export function VisitFormDialog({
                     type="checkbox"
                     className="h-4 w-4 accent-emerald-600"
                     checked={!!checkedProducts[p.id]}
-                    onChange={(e) => setCheckedProducts((m) => ({ ...m, [p.id]: e.target.checked }))}
+                    onChange={(e) => {
+                      setCheckedProducts((m) => ({ ...m, [p.id]: e.target.checked }));
+                      if (!e.target.checked) setCheckedMaterials((current) => {
+                        const next = { ...current };
+                        for (const material of p.materials ?? []) delete next[material.id];
+                        return next;
+                      });
+                    }}
                   />
                   {p.brand}
                   <span className="text-xs text-slate-400">{p.molecule}</span>
                 </label>
                 {checkedProducts[p.id] && (
-                  <Input
-                    placeholder="医生反馈(可选)"
-                    value={feedbacks[p.id] ?? ""}
-                    onChange={(e) => setFeedbacks((m) => ({ ...m, [p.id]: e.target.value }))}
-                  />
+                  <div className="min-w-0 flex-1 space-y-2"><Input placeholder="医生反馈(可选)" value={feedbacks[p.id] ?? ""} onChange={(e) => setFeedbacks((m) => ({ ...m, [p.id]: e.target.value }))}/><div className="flex flex-wrap gap-2">{(p.materials ?? []).filter((material) => material.status === "APPROVED" && new Date(material.effectiveDate) <= new Date(`${plannedDate ?? "2026-07-24"}T00:00:00+08:00`) && new Date(material.expiryDate) > new Date(`${plannedDate ?? "2026-07-24"}T00:00:00+08:00`)).map((material) => <label key={material.id} className="rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-800"><input className="mr-1 accent-emerald-600" type="checkbox" checked={!!checkedMaterials[material.id]} onChange={e=>setCheckedMaterials(current=>({...current,[material.id]:e.target.checked}))}/>{material.title} · {material.version}</label>)}</div></div>
                 )}
               </div>
             ))}

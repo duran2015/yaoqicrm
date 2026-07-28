@@ -4,6 +4,7 @@ import { err, parseDate } from "@/lib/api";
 import { visitInclude } from "@/lib/visit-include";
 import { Prisma } from "@prisma/client";
 import { calculateInventory } from "@/lib/workflow";
+import { validateMaterialSelection } from "@/lib/product-material";
 
 const VISIT_TYPES = ["FACE_TO_FACE", "PHONE", "CONFERENCE", "JOINT"];
 const VISIT_SOURCES = ["MANUAL", "AI", "IMPORT"];
@@ -111,6 +112,7 @@ export async function POST(req: NextRequest) {
   const productItems = Array.isArray(body.products) ? (body.products as Record<string, unknown>[]) : [];
   const sampleItems = Array.isArray(body.samples) ? (body.samples as Record<string, unknown>[]) : [];
   const checkinItems = Array.isArray(body.checkins) ? (body.checkins as Record<string, unknown>[]) : [];
+  const materialIds = Array.isArray(body.materialIds) ? [...new Set(body.materialIds.map(String).filter(Boolean))] : [];
 
   // 校验样品:批次存在、数量为正整数、该代表该产品库存充足
   const sampleCreates: Prisma.SampleTransactionCreateWithoutVisitInput[] = [];
@@ -151,6 +153,16 @@ export async function POST(req: NextRequest) {
     if (!product) return err(`产品 ${productId} 不存在`, 404);
     productCreates.push({ product: { connect: { id: productId } }, feedback: p.feedback ? String(p.feedback) : null });
   }
+  const selectedProductIds = productItems.map((item) => typeof item.productId === "string" ? item.productId : "").filter(Boolean);
+  const selectedMaterials = materialIds.length ? await prisma.productMaterial.findMany({ where: { id: { in: materialIds } } }) : [];
+  const validMaterialIds = validateMaterialSelection(selectedMaterials, selectedProductIds, visitDate);
+  if (!validMaterialIds || selectedMaterials.length !== materialIds.length) return err("所选资料已失效、未批准或不属于本次讨论产品", 409);
+  const materialCreates: Prisma.VisitMaterialUsageCreateWithoutVisitInput[] = selectedMaterials.map((material) => ({
+    material: { connect: { id: material.id } },
+    titleSnapshot: material.title,
+    versionSnapshot: material.version,
+    approvalCodeSnapshot: material.approvalCode!,
+  }));
 
   // 校验签到明细
   const checkinCreates: Prisma.CheckInCreateWithoutVisitInput[] = [];
@@ -207,6 +219,7 @@ export async function POST(req: NextRequest) {
         receiverId,
         jointWithId: body.jointWithId ? String(body.jointWithId) : null,
         products: { create: productCreates },
+        materialUsages: { create: materialCreates },
         samples: { create: sampleCreates },
         checkins: { create: checkinCreates },
       },

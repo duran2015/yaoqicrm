@@ -304,6 +304,7 @@ export default function HcpDetailPage() {
                             ))}
                           </div>
                         )}
+                        {(v.materialUsages ?? []).length > 0 && <div className="mt-2 text-xs text-emerald-700">使用资料：{v.materialUsages!.map((item) => `${item.titleSnapshot} · ${item.versionSnapshot} · ${item.approvalCodeSnapshot}`).join("；")}</div>}
                         {v.samples.length > 0 && (
                           <div className="flex flex-wrap gap-1.5">
                             {v.samples.map((s) => (

@@ -8,6 +8,7 @@ export const visitInclude = {
   hcp: { select: { id: true, code: true, name: true, title: true, specialty: true, tier: true } },
   hco: { select: { id: true, code: true, name: true, type: true, level: true } },
   products: { include: { product: { select: { id: true, brand: true, molecule: true } } } },
+  materialUsages: { include: { material: { select: { productId: true, externalUrl: true } } } },
   samples: { include: { lot: { include: { product: { select: { id: true, brand: true } } } } } },
   checkins: { orderBy: { checkinTime: "asc" as const } },
 } satisfies Prisma.VisitInclude;

@@ -31,6 +31,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
         include: {
           employee: { select: { id: true, name: true, role: true } },
           products: { include: { product: { select: { id: true, brand: true, molecule: true } } } },
+          materialUsages: { include: { material: { select: { productId: true, externalUrl: true } } } },
           samples: { include: { lot: { include: { product: { select: { id: true, brand: true } } } } } },
         },
       },
