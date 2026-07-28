@@ -33,9 +33,6 @@ const day = (offsetFromRef: number, hour = 9, minute = 0) => {
   return d;
 };
 
-/** 结构化拜访目的枚举(真实导出数据即按此逗号组合存储) */
-const PURPOSE_OPTIONS = ["产品信息传递", "临床信息沟通", "市场现状调研", "学术会议沟通", "其他"];
-
 /** 按真实分布生成 purposes 数组:产品信息传递为主,常与临床信息沟通组合 */
 function genPurposes(): string[] {
   const r = rng();

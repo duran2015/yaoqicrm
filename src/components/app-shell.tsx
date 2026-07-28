@@ -8,7 +8,6 @@ import { isManagerRole, ROLE_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Loading } from "@/components/ui";
 import { VisitFormDialog } from "@/components/visit-form";
-import type { Visit } from "@/lib/types";
 
 const NAV_ITEMS = [
   { href: "/", label: "仪表盘", icon: "📊" },
@@ -73,7 +72,7 @@ function Sidebar() {
       ),
     ] as [string, typeof employees]);
 
-  function onVisitCreated(_visit: Visit) {
+  function onVisitCreated() {
     setNotice("拜访已提交");
     window.dispatchEvent(new CustomEvent("pharma-crm:visit-created"));
     setTimeout(() => setNotice(null), 3000);

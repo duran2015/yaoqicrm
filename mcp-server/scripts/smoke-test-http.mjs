@@ -65,7 +65,10 @@ try {
     const res = await fetch(`${CRM_BASE_URL}/api/employees`);
     const { data } = await res.json();
     const flat = [];
-    const walk = (nodes) => nodes.forEach((n) => { flat.push(n); n.subordinates?.length && walk(n.subordinates); });
+    const walk = (nodes) => nodes.forEach((n) => {
+      flat.push(n);
+      if (n.subordinates?.length) walk(n.subordinates);
+    });
     walk(data ?? []);
     const mr = flat.find((e) => e.role === "MR");
     if (!mr) throw new Error("CRM 中未找到任何 MR");
