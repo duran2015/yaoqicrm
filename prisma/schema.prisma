@@ -9,33 +9,36 @@ datasource db {
 
 // 销售组织:医药代表→地区经理→大区经理
 model Employee {
-  id                 String               @id @default(cuid())
-  employeeCode       String               @unique // 工号,如 "YG1001"
-  name               String
-  role               String // MR | ASM | RSM | ADMIN
-  division           String // 事业部,如 "肿瘤线" | "心血管线"
-  phone              String?
-  reportsToId        String?
-  reportsTo          Employee?            @relation("OrgTree", fields: [reportsToId], references: [id])
-  subordinates       Employee[]           @relation("OrgTree")
-  territoryId        String?
-  territory          Territory?           @relation(fields: [territoryId], references: [id])
-  departmentId       String?
-  department         Department?          @relation(fields: [departmentId], references: [id])
-  visits             Visit[]
-  receivedVisits     Visit[]              @relation("VisitReceiver")
-  evaluatedVisits    Visit[]              @relation("VisitEvaluator")
-  checkins           CheckIn[]
-  tourPlans          TourPlan[]
-  sampleTransactions SampleTransaction[]
-  targets            Target[]
-  assignments        CustomerAssignment[]
-  kaHcos             Hco[]                @relation("KaOwner")
-  followUpTasks      FollowUpTask[]       @relation("TaskAssignee")
-  managedCoachings   CoachingAction[]     @relation("CoachingManager")
-  assignedCoachings  CoachingAction[]     @relation("CoachingEmployee")
-  cyclePlans         CyclePlan[]          @relation("CyclePlanEmployee")
-  createdCyclePlans  CyclePlan[]          @relation("CyclePlanCreator")
+  id                  String               @id @default(cuid())
+  employeeCode        String               @unique // 工号,如 "YG1001"
+  name                String
+  role                String // MR | ASM | RSM | ADMIN
+  division            String // 事业部,如 "肿瘤线" | "心血管线"
+  phone               String?
+  reportsToId         String?
+  reportsTo           Employee?            @relation("OrgTree", fields: [reportsToId], references: [id])
+  subordinates        Employee[]           @relation("OrgTree")
+  territoryId         String?
+  territory           Territory?           @relation(fields: [territoryId], references: [id])
+  departmentId        String?
+  department          Department?          @relation(fields: [departmentId], references: [id])
+  visits              Visit[]
+  receivedVisits      Visit[]              @relation("VisitReceiver")
+  evaluatedVisits     Visit[]              @relation("VisitEvaluator")
+  checkins            CheckIn[]
+  tourPlans           TourPlan[]
+  sampleTransactions  SampleTransaction[]
+  targets             Target[]
+  assignments         CustomerAssignment[]
+  kaHcos              Hco[]                @relation("KaOwner")
+  followUpTasks       FollowUpTask[]       @relation("TaskAssignee")
+  managedCoachings    CoachingAction[]     @relation("CoachingManager")
+  assignedCoachings   CoachingAction[]     @relation("CoachingEmployee")
+  cyclePlans          CyclePlan[]          @relation("CyclePlanEmployee")
+  createdCyclePlans   CyclePlan[]          @relation("CyclePlanCreator")
+  ownedAccountPlans   AccountPlan[]        @relation("AccountPlanOwner")
+  createdAccountPlans AccountPlan[]        @relation("AccountPlanCreator")
+  accountMilestones   AccountMilestone[]   @relation("AccountMilestoneOwner")
 }
 
 // 五级部门树(行政组织,独立于 Territory 辖区):
@@ -126,6 +129,7 @@ model Hco {
   assignments      CustomerAssignment[]
   tierHistories    CustomerTierHistory[]
   followUpTasks    FollowUpTask[]
+  accountPlans     AccountPlan[]
 }
 
 // 医生 HCP
@@ -172,21 +176,22 @@ model Hcp {
   idType              String? // 证件类型:身份证等
   idNumber            String? // 证件号码(API 层脱敏)
 
-  visits             Visit[]
-  sampleTransactions SampleTransaction[]
-  eventAttendances   EventAttendance[]
-  tourPlanItems      TourPlanItem[]
-  educations         HcpEducation[]
-  bankAccounts       HcpBankAccount[]
-  assignments        CustomerAssignment[]
-  tierHistories      CustomerTierHistory[]
-  followUpTasks      FollowUpTask[]
-  cyclePlanItems     CyclePlanItem[]
+  visits              Visit[]
+  sampleTransactions  SampleTransaction[]
+  eventAttendances    EventAttendance[]
+  tourPlanItems       TourPlanItem[]
+  educations          HcpEducation[]
+  bankAccounts        HcpBankAccount[]
+  assignments         CustomerAssignment[]
+  tierHistories       CustomerTierHistory[]
+  followUpTasks       FollowUpTask[]
+  cyclePlanItems      CyclePlanItem[]
+  accountStakeholders AccountStakeholder[]
 }
 
 // 产品主数据:品牌→分子→治疗领域
 model Product {
-  id                  String         @id @default(cuid())
+  id                  String               @id @default(cuid())
   brand               String // 商品名
   molecule            String // 通用名/分子
   therapeuticCategory String // 治疗领域
@@ -197,6 +202,7 @@ model Product {
   sampleLots          SampleLot[]
   targets             Target[]
   hcoProducts         HcoProduct[]
+  accountPlanProducts AccountPlanProduct[]
 }
 
 // 拜访记录 DCR(最核心事实表)
@@ -293,36 +299,105 @@ model TourPlanItem {
 
 // 月度客户覆盖目标快照
 model CyclePlan {
-  id           String          @id @default(cuid())
-  employeeId   String
-  employee     Employee        @relation("CyclePlanEmployee", fields: [employeeId], references: [id])
-  month        DateTime
-  status       String          @default("ACTIVE") // ACTIVE | CLOSED
-  frequencyA   Int             @default(4)
-  frequencyB   Int             @default(2)
-  frequencyC   Int             @default(1)
-  frequencyD   Int             @default(0)
-  createdById  String
-  createdBy    Employee        @relation("CyclePlanCreator", fields: [createdById], references: [id])
-  items        CyclePlanItem[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id          String          @id @default(cuid())
+  employeeId  String
+  employee    Employee        @relation("CyclePlanEmployee", fields: [employeeId], references: [id])
+  month       DateTime
+  status      String          @default("ACTIVE") // ACTIVE | CLOSED
+  frequencyA  Int             @default(4)
+  frequencyB  Int             @default(2)
+  frequencyC  Int             @default(1)
+  frequencyD  Int             @default(0)
+  createdById String
+  createdBy   Employee        @relation("CyclePlanCreator", fields: [createdById], references: [id])
+  items       CyclePlanItem[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   @@unique([employeeId, month])
   @@index([month, status])
 }
 
 model CyclePlanItem {
-  id            String    @id @default(cuid())
-  cyclePlanId   String
-  cyclePlan     CyclePlan @relation(fields: [cyclePlanId], references: [id], onDelete: Cascade)
-  hcpId         String
-  hcp           Hcp       @relation(fields: [hcpId], references: [id])
-  tierSnapshot  String
-  targetVisits  Int
+  id           String    @id @default(cuid())
+  cyclePlanId  String
+  cyclePlan    CyclePlan @relation(fields: [cyclePlanId], references: [id], onDelete: Cascade)
+  hcpId        String
+  hcp          Hcp       @relation(fields: [hcpId], references: [id])
+  tierSnapshot String
+  targetVisits Int
 
   @@unique([cyclePlanId, hcpId])
   @@index([hcpId])
+}
+
+// 战略 HCO 年度客户计划
+model AccountPlan {
+  id              String               @id @default(cuid())
+  hcoId           String
+  hco             Hco                  @relation(fields: [hcoId], references: [id])
+  year            Int
+  ownerId         String
+  owner           Employee             @relation("AccountPlanOwner", fields: [ownerId], references: [id])
+  createdById     String
+  createdBy       Employee             @relation("AccountPlanCreator", fields: [createdById], references: [id])
+  status          String               @default("ACTIVE") // ACTIVE | CLOSED
+  businessGoal    String
+  situation       String?
+  strategy        String
+  successCriteria String
+  products        AccountPlanProduct[]
+  stakeholders    AccountStakeholder[]
+  milestones      AccountMilestone[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([hcoId, year])
+  @@index([ownerId, year, status])
+}
+
+model AccountPlanProduct {
+  id            String      @id @default(cuid())
+  accountPlanId String
+  accountPlan   AccountPlan @relation(fields: [accountPlanId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id])
+
+  @@unique([accountPlanId, productId])
+}
+
+model AccountStakeholder {
+  id            String      @id @default(cuid())
+  accountPlanId String
+  accountPlan   AccountPlan @relation(fields: [accountPlanId], references: [id], onDelete: Cascade)
+  hcpId         String
+  hcp           Hcp         @relation(fields: [hcpId], references: [id])
+  decisionRole  String // DECISION_MAKER | INFLUENCER | SUPPORTER
+  attitude      String // ADVOCATE | SUPPORTIVE | NEUTRAL | OPPOSED
+  notes         String?
+
+  @@unique([accountPlanId, hcpId])
+  @@index([hcpId])
+}
+
+model AccountMilestone {
+  id             String        @id @default(cuid())
+  accountPlanId  String
+  accountPlan    AccountPlan   @relation(fields: [accountPlanId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  ownerId        String
+  owner          Employee      @relation("AccountMilestoneOwner", fields: [ownerId], references: [id])
+  dueDate        DateTime
+  status         String        @default("OPEN") // OPEN | DONE | CANCELLED
+  completedAt    DateTime?
+  followUpTaskId String?       @unique
+  followUpTask   FollowUpTask? @relation(fields: [followUpTaskId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([accountPlanId, status, dueDate])
+  @@index([ownerId, status, dueDate])
 }
 
 // 样品批次
@@ -379,27 +454,28 @@ model EventAttendance {
 }
 
 model FollowUpTask {
-  id              String    @id @default(cuid())
-  title           String
-  description     String?
-  status          String    @default("OPEN") // OPEN | DONE | CANCELLED
-  priority        String    @default("NORMAL") // NORMAL | HIGH
-  dueDate         DateTime?
-  assigneeId      String
-  assignee        Employee  @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  hcpId           String?
-  hcp             Hcp?      @relation(fields: [hcpId], references: [id])
-  hcoId           String?
-  hco             Hco?      @relation(fields: [hcoId], references: [id])
-  sourceVisitId   String?
-  sourceVisit     Visit?    @relation("TaskSourceVisit", fields: [sourceVisitId], references: [id])
-  sourceEventId   String?
-  sourceEvent     MedEvent? @relation(fields: [sourceEventId], references: [id])
-  followUpVisitId String?   @unique
-  followUpVisit   Visit?    @relation("TaskFollowUpVisit", fields: [followUpVisitId], references: [id])
-  completedAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id               String            @id @default(cuid())
+  title            String
+  description      String?
+  status           String            @default("OPEN") // OPEN | DONE | CANCELLED
+  priority         String            @default("NORMAL") // NORMAL | HIGH
+  dueDate          DateTime?
+  assigneeId       String
+  assignee         Employee          @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  hcpId            String?
+  hcp              Hcp?              @relation(fields: [hcpId], references: [id])
+  hcoId            String?
+  hco              Hco?              @relation(fields: [hcoId], references: [id])
+  sourceVisitId    String?
+  sourceVisit      Visit?            @relation("TaskSourceVisit", fields: [sourceVisitId], references: [id])
+  sourceEventId    String?
+  sourceEvent      MedEvent?         @relation(fields: [sourceEventId], references: [id])
+  followUpVisitId  String?           @unique
+  followUpVisit    Visit?            @relation("TaskFollowUpVisit", fields: [followUpVisitId], references: [id])
+  completedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  accountMilestone AccountMilestone?
 
   @@index([assigneeId, status, dueDate])
   @@index([hcpId, status])
