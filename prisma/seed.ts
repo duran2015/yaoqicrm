@@ -47,6 +47,10 @@ function genPurposes(): string[] {
 
 async function main() {
   console.log("清空旧数据...");
+  await prisma.accountMilestone.deleteMany();
+  await prisma.accountStakeholder.deleteMany();
+  await prisma.accountPlanProduct.deleteMany();
+  await prisma.accountPlan.deleteMany();
   await prisma.cyclePlanItem.deleteMany();
   await prisma.cyclePlan.deleteMany();
   await prisma.followUpTask.deleteMany();
@@ -138,6 +142,12 @@ async function main() {
   for (let i = 0; i < hcoDefs.length; i++) {
     const rec = await prisma.hco.create({ data: { ...hcoDefs[i], code: `HOS${String(i + 1).padStart(3, "0")}` } });
     hcos.push({ id: rec.id, name: rec.name });
+  }
+  for (let index = 0; index < 3; index++) {
+    await prisma.hco.update({
+      where: { id: hcos[index].id },
+      data: { isStrategic: "是", cooperationStatus: "合作", kaOwnerId: mrs[index].id },
+    });
   }
 
   // ---------- 30 位医生 HCP(A:B:C = 6:15:9,编码 DR0001+) ----------
@@ -659,6 +669,107 @@ async function main() {
     ],
   });
 
+  // ---------- Account Plan Lite:健康推进 / 决策关系风险 / 执行逾期 ----------
+  console.log("创建战略客户 Account Plan...");
+  const accountScenarios = [
+    {
+      hco: hcos[0],
+      owner: mrs[0],
+      goal: "完成核心产品院内准入并建立重点科室常规使用",
+      situation: "重点科室认可度较高，药事路径明确",
+      strategy: "以重点科室临床证据沟通带动药事路径推进",
+      success: "完成准入并覆盖三个重点科室",
+      milestoneStates: ["DONE", "DONE"],
+      dueDates: [day(-8), day(-2)],
+    },
+    {
+      hco: hcos[1],
+      owner: mrs[1],
+      goal: "建立关键决策共识并明确下一轮院内准入窗口",
+      situation: "使用科室支持，但核心决策人仍保持中立",
+      strategy: "补充药物经济学证据并安排跨科室沟通",
+      success: "核心决策人转为支持并确认药事会窗口",
+      milestoneStates: ["OPEN", "DONE"],
+      dueDates: [day(12), day(-3)],
+    },
+    {
+      hco: hcos[2],
+      owner: mrs[2],
+      goal: "推进重点科室试用并形成首批病例反馈",
+      situation: "临床兴趣明确，但执行材料准备落后",
+      strategy: "由 KA 协同代表完成病例筛选和科室会",
+      success: "完成科室会并收集三例规范反馈",
+      milestoneStates: ["OPEN", "OPEN"],
+      dueDates: [day(-10), day(8)],
+    },
+  ];
+  for (let index = 0; index < accountScenarios.length; index++) {
+    const scenario = accountScenarios[index];
+    const hospitalHcps = hcps.filter((hcp) => hcp.hcoId === scenario.hco.id).slice(0, 2);
+    const plan = await prisma.accountPlan.create({
+      data: {
+        hcoId: scenario.hco.id,
+        year: 2026,
+        ownerId: scenario.owner.id,
+        createdById: scenario.owner.bossId,
+        businessGoal: scenario.goal,
+        situation: scenario.situation,
+        strategy: scenario.strategy,
+        successCriteria: scenario.success,
+        products: { create: [{ productId: products.find((product) => product.division === scenario.owner.division)!.id }] },
+        stakeholders: {
+          create: hospitalHcps.map((hcp, stakeholderIndex) => ({
+            hcpId: hcp.id,
+            decisionRole: stakeholderIndex === 0 ? "DECISION_MAKER" : "INFLUENCER",
+            attitude: index === 1 && stakeholderIndex === 0 ? "NEUTRAL" : "SUPPORTIVE",
+            notes: stakeholderIndex === 0 ? "年度计划核心关系人" : "重点科室影响者",
+          })),
+        },
+        milestones: {
+          create: [
+            {
+              title: index === 0 ? "完成准入材料评审" : index === 1 ? "完成决策人药经沟通" : "完成病例筛选材料",
+              ownerId: scenario.owner.id,
+              dueDate: scenario.dueDates[0],
+              status: scenario.milestoneStates[0],
+              completedAt: scenario.milestoneStates[0] === "DONE" ? scenario.dueDates[0] : null,
+            },
+            {
+              title: index === 0 ? "确认首批使用科室" : index === 1 ? "完成重点科室访谈" : "举办重点科室会",
+              ownerId: scenario.owner.id,
+              dueDate: scenario.dueDates[1],
+              status: scenario.milestoneStates[1],
+              completedAt: scenario.milestoneStates[1] === "DONE" ? scenario.dueDates[1] : null,
+            },
+          ],
+        },
+      },
+      include: { milestones: true },
+    });
+    if (index === 0) {
+      const milestone = plan.milestones[0];
+      const task = await prisma.followUpTask.create({
+        data: {
+          title: milestone.title,
+          description: `来源：${scenario.hco.name} Account Plan`,
+          status: "DONE",
+          priority: "HIGH",
+          assigneeId: scenario.owner.id,
+          hcoId: scenario.hco.id,
+          dueDate: milestone.dueDate,
+          completedAt: milestone.completedAt,
+        },
+      });
+      await prisma.accountMilestone.update({ where: { id: milestone.id }, data: { followUpTaskId: task.id } });
+    }
+    if (index === 1 && hospitalHcps[0]) {
+      await prisma.visit.updateMany({
+        where: { employeeId: scenario.owner.id, hcpId: hospitalHcps[0].id },
+        data: { status: "DRAFT" },
+      });
+    }
+  }
+
   // ---------- 本月(2026-07)每个 MR 的 Target ----------
   console.log("创建销售指标...");
   for (const mr of mrs) {
@@ -680,7 +791,7 @@ async function main() {
   console.log(`  员工 ${await prisma.employee.count()},部门 ${await prisma.department.count()},辖区 ${await prisma.territory.count()},机构 ${await prisma.hco.count()}`);
   console.log(`  HCP ${await prisma.hcp.count()},产品 ${await prisma.product.count()},批次 ${await prisma.sampleLot.count()}`);
   console.log(`  拜访 ${visitCount}(有效 ${validCount} / 无效 ${invalidCount} / 待评定 ${pendingCount}),签到 ${await prisma.checkIn.count()}(地点异常 ${mismatchCount})`);
-  console.log(`  样品事务 ${await prisma.sampleTransaction.count()},周计划 ${await prisma.tourPlan.count()},月度计划 ${await prisma.cyclePlan.count()},会议 ${await prisma.medEvent.count()},指标 ${await prisma.target.count()}`);
+  console.log(`  样品事务 ${await prisma.sampleTransaction.count()},周计划 ${await prisma.tourPlan.count()},月度计划 ${await prisma.cyclePlan.count()},客户策略 ${await prisma.accountPlan.count()},会议 ${await prisma.medEvent.count()},指标 ${await prisma.target.count()}`);
 }
 
 main()

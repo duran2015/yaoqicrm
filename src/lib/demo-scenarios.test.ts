@@ -51,6 +51,25 @@ test("seed contains the complete P0 demo scenarios", async () => {
   assert.ok(demoRates[0] >= 0.8, "YG1004 should demonstrate high achievement");
   assert.ok(demoRates[1] >= 0.3 && demoRates[1] < 0.8, "YG1005 should demonstrate in-progress achievement");
   assert.ok(demoRates[2] < 0.3, "YG1006 should demonstrate lagging achievement");
+
+  const accountPlans = await prisma.accountPlan.findMany({
+    where: { year: 2026 },
+    include: { products: true, stakeholders: true, milestones: true },
+    orderBy: { businessGoal: "asc" },
+  });
+  assert.equal(accountPlans.length, 3, "demo needs exactly three account plans");
+  assert.ok(accountPlans.every((plan) => plan.products.length >= 1), "every account plan needs a focus product");
+  assert.ok(accountPlans.every((plan) => plan.stakeholders.length >= 2), "every account plan needs two stakeholders");
+  assert.ok(accountPlans.every((plan) => plan.milestones.length >= 2), "every account plan needs two milestones");
+  assert.ok(accountPlans.some((plan) => plan.milestones.filter((item) => item.status !== "CANCELLED").every((item) => item.status === "DONE")), "one plan should demonstrate healthy execution");
+  assert.ok(accountPlans.some((plan) => plan.milestones.some((item) => item.status === "OPEN" && item.dueDate < new Date("2026-07-28T00:00:00+08:00"))), "one plan should have an overdue milestone");
+
+  const relationshipRisk = accountPlans.find((plan) => plan.businessGoal.includes("决策共识"));
+  assert.ok(relationshipRisk);
+  const decisionMakerIds = relationshipRisk.stakeholders.filter((item) => item.decisionRole === "DECISION_MAKER").map((item) => item.hcpId);
+  assert.equal(await prisma.visit.count({
+    where: { employeeId: relationshipRisk.ownerId, hcpId: { in: decisionMakerIds }, status: "SUBMITTED", visitDate: { gte: new Date("2025-12-31T16:00:00.000Z"), lt: new Date("2026-12-31T16:00:00.000Z") } },
+  }), 0, "relationship-risk decision maker must be uncovered by the plan owner");
 });
 
 test.after(async () => {
