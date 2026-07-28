@@ -32,6 +32,7 @@ const WORK_NAV_ITEMS = [
   { href: "/samples", label: "样品库存", icon: "📦" },
   { href: "/events", label: "会议", icon: "🎤" },
   { href: "/products", label: "产品", icon: "💊" },
+  { href: "/sales-intelligence", label: "销售情报", icon: "🧠" },
 ];
 
 function NavLink({ href, label, icon, pathname }: { href: string; label: string; icon: string; pathname: string }) {
