@@ -7,6 +7,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
+    "test": "tsx --test src/*.test.ts",
     "start": "tsx src/index.ts",
     "start:http": "tsx src/index.ts --http",
     "start:built": "node dist/index.js",
