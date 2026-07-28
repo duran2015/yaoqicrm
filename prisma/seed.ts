@@ -47,15 +47,17 @@ function genPurposes(): string[] {
 
 async function main() {
   console.log("清空旧数据...");
+  await prisma.followUpTask.deleteMany();
+  await prisma.coachingAction.deleteMany();
   await prisma.checkIn.deleteMany();
   await prisma.eventAttendance.deleteMany();
   await prisma.medEvent.deleteMany();
   await prisma.sampleTransaction.deleteMany();
   await prisma.sampleLot.deleteMany();
   await prisma.visitProduct.deleteMany();
-  await prisma.visit.deleteMany();
   await prisma.tourPlanItem.deleteMany();
   await prisma.tourPlan.deleteMany();
+  await prisma.visit.deleteMany();
   await prisma.target.deleteMany();
   await prisma.hcp.deleteMany();
   await prisma.hco.deleteMany();
@@ -447,6 +449,24 @@ async function main() {
     });
   }
 
+  // 将一条已批准计划与真实拜访关联，形成“部分完成”的周日历
+  const approvedPlan = await prisma.tourPlan.findFirst({
+    where: { employeeId: mrs[0].id, status: "APPROVED" },
+    include: { items: { where: { hcpId: { not: null } }, take: 1 } },
+  });
+  if (approvedPlan?.items[0]) {
+    const completedVisit = await prisma.visit.findFirst({
+      where: { employeeId: mrs[0].id, hcpId: approvedPlan.items[0].hcpId },
+      orderBy: { visitDate: "desc" },
+    });
+    if (completedVisit) {
+      await prisma.tourPlanItem.update({
+        where: { id: approvedPlan.items[0].id },
+        data: { status: "COMPLETED", visitId: completedVisit.id },
+      });
+    }
+  }
+
   // ---------- 2 个会议 ----------
   console.log("创建医学会议...");
   const deptMeeting = await prisma.medEvent.create({
@@ -456,6 +476,7 @@ async function main() {
       eventDate: day(-9, 15), // 2026-07-15 已举办
       location: "苏州大学附属第一医院 内科楼3楼会议室",
       budget: 3000,
+      status: "COMPLETED",
     },
   });
   const cityMeeting = await prisma.medEvent.create({
@@ -465,16 +486,106 @@ async function main() {
       eventDate: day(15, 9), // 2026-08-08 计划中
       location: "杭州黄龙饭店",
       budget: 80000,
+      status: "OPEN",
     },
   });
   const deptAttendees = hcps.filter((h) => h.division === "肿瘤线").slice(0, 6);
   for (const h of deptAttendees) {
-    await prisma.eventAttendance.create({ data: { eventId: deptMeeting.id, hcpId: h.id } });
+    await prisma.eventAttendance.create({
+      data: { eventId: deptMeeting.id, hcpId: h.id, status: "CHECKED_IN", checkedInAt: day(-9, 15, 5) },
+    });
   }
   const cityAttendees = hcps.filter((h) => h.tier === "A").slice(0, 5);
   for (const h of cityAttendees) {
     await prisma.eventAttendance.create({ data: { eventId: cityMeeting.id, hcpId: h.id } });
   }
+
+  // ---------- P0 闭环演示场景 ----------
+  console.log("创建任务、辅导与样品闭环场景...");
+  const demoMr = mrs[0];
+  const demoHcp = hcps.find((hcp) => hcp.division === demoMr.division)!;
+  const demoVisit = await prisma.visit.findFirst({
+    where: { employeeId: demoMr.id, hcpId: demoHcp.id },
+    orderBy: { visitDate: "desc" },
+  });
+  await prisma.followUpTask.createMany({
+    data: [
+      {
+        title: "补充最新 III 期研究文献",
+        description: "上次拜访承诺发送完整研究资料并确认反馈",
+        status: "OPEN",
+        priority: "HIGH",
+        dueDate: day(-2, 18),
+        assigneeId: demoMr.id,
+        hcpId: demoHcp.id,
+        hcoId: demoHcp.hcoId,
+        sourceVisitId: demoVisit?.id,
+      },
+      {
+        title: "确认下周科室会时间",
+        status: "OPEN",
+        priority: "NORMAL",
+        dueDate: day(3, 18),
+        assigneeId: demoMr.id,
+        hcpId: demoHcp.id,
+        hcoId: demoHcp.hcoId,
+        sourceEventId: deptMeeting.id,
+      },
+      {
+        title: "发送患者教育材料",
+        status: "DONE",
+        priority: "NORMAL",
+        dueDate: day(-4, 18),
+        completedAt: day(-3, 16),
+        assigneeId: demoMr.id,
+        hcpId: demoHcp.id,
+        hcoId: demoHcp.hcoId,
+        sourceVisitId: demoVisit?.id,
+      },
+    ],
+  });
+  await prisma.coachingAction.createMany({
+    data: [
+      {
+        title: "提升拜访结果记录质量",
+        description: "下次拜访需明确客户异议、达成结果和截止日期",
+        status: "OPEN",
+        managerId: asmOnc.id,
+        employeeId: demoMr.id,
+        sourceVisitId: demoVisit?.id,
+        dueDate: day(4, 18),
+      },
+      {
+        title: "完成重点客户拜访复盘",
+        status: "DONE",
+        managerId: asmOnc.id,
+        employeeId: demoMr.id,
+        sourceVisitId: demoVisit?.id,
+        completedAt: day(-1, 17),
+      },
+    ],
+  });
+  const demoLot = lots.find((lot) => lot.productId === products.find((product) => product.division === demoMr.division)!.id)!;
+  await prisma.sampleTransaction.createMany({
+    data: [
+      {
+        lotId: demoLot.id,
+        employeeId: demoMr.id,
+        quantity: 2,
+        type: "RETURN",
+        reason: "近期无发放计划，退回办事处",
+        transDate: day(-1, 10),
+      },
+      {
+        lotId: demoLot.id,
+        employeeId: demoMr.id,
+        quantity: -1,
+        type: "ADJUST",
+        reason: "月末盘点差异",
+        transDate: day(0, 16),
+      },
+    ],
+  });
 
   // ---------- 本月(2026-07)每个 MR 的 Target ----------
   console.log("创建销售指标...");
