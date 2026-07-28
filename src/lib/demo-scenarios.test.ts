@@ -94,6 +94,14 @@ test("seed contains the complete P0 demo scenarios", async () => {
   const scenarios = [...ratesByEmployee.values()];
   assert.ok(scenarios.some((rates) => rates.every((rate, index) => index === 0 || rate >= rates[index - 1])), "one sales story must grow steadily");
   assert.ok(scenarios.some((rates) => rates.at(-1)! < 0.8 && rates.at(-2)! < 0.8), "one sales story must stay below target");
+
+  const materialClient = prisma as unknown as {
+    productMaterial: { findMany(args: unknown): Promise<Array<{ status: string; expiryDate: Date; usages: unknown[] }>> };
+  };
+  const materials = await materialClient.productMaterial.findMany({ include: { usages: true } });
+  assert.ok(materials.some((item) => item.status === "APPROVED" && item.expiryDate > new Date("2026-07-24T00:00:00+08:00")));
+  assert.ok(materials.some((item) => item.status === "RETIRED"));
+  assert.ok(materials.some((item) => item.usages.length > 0), "one visit needs a material usage snapshot");
 });
 
 test.after(async () => {

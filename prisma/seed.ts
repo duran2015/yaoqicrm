@@ -47,6 +47,8 @@ function genPurposes(): string[] {
 
 async function main() {
   console.log("清空旧数据...");
+  await prisma.visitMaterialUsage.deleteMany();
+  await prisma.productMaterial.deleteMany();
   await prisma.salesResult.deleteMany();
   await prisma.salesImportBatch.deleteMany();
   await prisma.accountMilestone.deleteMany();
@@ -679,6 +681,49 @@ async function main() {
       },
     ],
   });
+
+  // ---------- 产品批准资料与历史拜访使用 ----------
+  console.log("创建产品批准资料...");
+  const materialRecords = [];
+  for (let index = 0; index < 3; index++) {
+    const product = products[index];
+    const approved = await prisma.productMaterial.create({
+      data: {
+        productId: product.id,
+        title: `${product.brand} 核心研究沟通卡`,
+        type: "DETAIL_AID",
+        messageSummary: "仅按批准适应症沟通核心研究结果与安全性信息",
+        externalUrl: `https://example.test/materials/${index + 1}/current.pdf`,
+        version: "V2.0",
+        approvalCode: `APP-2026-${String(index + 1).padStart(3, "0")}`,
+        effectiveDate: new Date("2026-06-01T00:00:00+08:00"),
+        expiryDate: index === 1 ? new Date("2026-08-10T00:00:00+08:00") : new Date("2027-01-01T00:00:00+08:00"),
+        status: "APPROVED",
+      },
+    });
+    await prisma.productMaterial.create({
+      data: {
+        productId: product.id,
+        title: `${product.brand} 历史产品幻灯`,
+        type: "SLIDE_DECK",
+        messageSummary: "历史版本，仅用于展示追溯",
+        externalUrl: `https://example.test/materials/${index + 1}/retired.pdf`,
+        version: "V1.0",
+        approvalCode: `APP-2025-${String(index + 1).padStart(3, "0")}`,
+        effectiveDate: new Date("2025-06-01T00:00:00+08:00"),
+        expiryDate: new Date("2026-06-01T00:00:00+08:00"),
+        status: "RETIRED",
+      },
+    });
+    materialRecords.push(approved);
+  }
+  const materialVisit = await prisma.visit.findFirst({ where: { status: "SUBMITTED", products: { some: { productId: products[0].id } } }, orderBy: { visitDate: "desc" } });
+  if (materialVisit) {
+    const material = materialRecords[0];
+    await prisma.visitMaterialUsage.create({
+      data: { visitId: materialVisit.id, materialId: material.id, titleSnapshot: material.title, versionSnapshot: material.version, approvalCodeSnapshot: material.approvalCode! },
+    });
+  }
   const demoLot = lots.find((lot) => lot.productId === products.find((product) => product.division === demoMr.division)!.id)!;
   await prisma.sampleTransaction.createMany({
     data: [
@@ -821,7 +866,7 @@ async function main() {
 
   console.log("✅ 种子数据完成:");
   console.log(`  员工 ${await prisma.employee.count()},部门 ${await prisma.department.count()},辖区 ${await prisma.territory.count()},机构 ${await prisma.hco.count()}`);
-  console.log(`  HCP ${await prisma.hcp.count()},产品 ${await prisma.product.count()},批次 ${await prisma.sampleLot.count()}`);
+  console.log(`  HCP ${await prisma.hcp.count()},产品 ${await prisma.product.count()},批准资料 ${await prisma.productMaterial.count()},批次 ${await prisma.sampleLot.count()}`);
   console.log(`  拜访 ${visitCount}(有效 ${validCount} / 无效 ${invalidCount} / 待评定 ${pendingCount}),签到 ${await prisma.checkIn.count()}(地点异常 ${mismatchCount})`);
   console.log(`  样品事务 ${await prisma.sampleTransaction.count()},周计划 ${await prisma.tourPlan.count()},月度计划 ${await prisma.cyclePlan.count()},客户策略 ${await prisma.accountPlan.count()},销售结果 ${await prisma.salesResult.count()},会议 ${await prisma.medEvent.count()},指标 ${await prisma.target.count()}`);
 }
