@@ -35,6 +35,12 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
         },
       },
       eventAttendances: { include: { event: true } },
+      followUpTasks: {
+        where: { status: "OPEN" },
+        include: { assignee: { select: { id: true, name: true } } },
+        orderBy: { dueDate: "asc" },
+        take: 20,
+      },
     },
   });
   if (!hcp) return err("HCP 不存在", 404);

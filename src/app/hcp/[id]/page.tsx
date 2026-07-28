@@ -81,6 +81,25 @@ export default function HcpDetailPage() {
         </div>
       )}
 
+      {data.followUpTasks.length > 0 && (
+        <Card className="mb-4 border-amber-200 bg-amber-50 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-medium text-amber-900">待跟进事项</h2>
+            <Link href="/tasks" className="text-xs text-amber-700 hover:underline">进入任务中心</Link>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {data.followUpTasks.map((task) => (
+              <div key={task.id} className="rounded-md bg-white/70 px-3 py-2 text-sm text-slate-700">
+                {task.title}
+                <span className="ml-2 text-xs text-slate-400">
+                  {task.dueDate ? `截止 ${fmtDate(task.dueDate)}` : "未设截止日期"} · {task.assignee.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* 头部信息 */}
       <Card className="mb-4 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">

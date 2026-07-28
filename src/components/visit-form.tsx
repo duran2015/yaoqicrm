@@ -13,6 +13,12 @@ interface SampleRow {
   quantity: string;
 }
 
+interface VisitBrief {
+  recentVisits: { id: string; visitDate: string; outcome?: string | null; summary?: string | null; nextStep?: string | null }[];
+  openTasks: { id: string; title: string; dueDate?: string | null; priority: string }[];
+  sampleSummary: { product: { id: string; brand: string }; quantity: number }[];
+}
+
 interface VisitFormDialogProps {
   open: boolean;
   onClose: () => void;
@@ -50,6 +56,10 @@ export function VisitFormDialog({
   const [notes, setNotes] = useState("");
   const [summary, setSummary] = useState("");
   const [nextStep, setNextStep] = useState("");
+  const [createTask, setCreateTask] = useState(true);
+  const [followUpDueDate, setFollowUpDueDate] = useState("");
+  const [followUpPriority, setFollowUpPriority] = useState("NORMAL");
+  const [brief, setBrief] = useState<VisitBrief | null>(null);
   const [receiverId, setReceiverId] = useState("");
   const [checkinLocation, setCheckinLocation] = useState("");
   const [withCheckin, setWithCheckin] = useState(true);
@@ -77,6 +87,10 @@ export function VisitFormDialog({
     setNotes("");
     setSummary("");
     setNextStep("");
+    setCreateTask(true);
+    setFollowUpDueDate("");
+    setFollowUpPriority("NORMAL");
+    setBrief(null);
     setReceiverId("");
     setCheckinLocation("");
     setWithCheckin(true);
@@ -110,6 +124,16 @@ export function VisitFormDialog({
       .then((res) => setInventory(res.data))
       .catch(() => setInventory([]));
   }, [open, current]);
+
+  useEffect(() => {
+    if (!open || !current || !selectedHcp) {
+      setBrief(null);
+      return;
+    }
+    apiGet<VisitBrief>("/api/visit-brief", { hcpId: selectedHcp.id, employeeId: current.id })
+      .then(setBrief)
+      .catch(() => setBrief(null));
+  }, [open, current, selectedHcp]);
 
   // 医生搜索(防抖)
   const onHcpQueryChange = useCallback((value: string) => {
@@ -191,6 +215,13 @@ export function VisitFormDialog({
         notes: notes || undefined,
         summary: summary || undefined,
         nextStep: nextStep || undefined,
+        followUp: createTask && nextStep
+          ? {
+              title: nextStep,
+              dueDate: followUpDueDate || undefined,
+              priority: followUpPriority,
+            }
+          : undefined,
         receiverId: receiverId || undefined,
         checkins: withCheckin
           ? [{ locationName: checkinLocation || selectedHcp.hco?.name || undefined }]
@@ -265,6 +296,31 @@ export function VisitFormDialog({
             </div>
           )}
         </Field>
+
+        {selectedHcp && brief && (
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+            <div className="mb-2 text-sm font-medium text-blue-900">拜访前简报</div>
+            <div className="grid gap-3 text-xs text-slate-600 md:grid-cols-3">
+              <div>
+                <div className="mb-1 font-medium text-slate-700">最近沟通</div>
+                {brief.recentVisits.slice(0, 2).map((visit) => (
+                  <div key={visit.id} className="mb-1">{fmtDate(visit.visitDate)} · {visit.outcome || visit.summary || "未记录结果"}</div>
+                ))}
+                {!brief.recentVisits.length && <div>暂无历史拜访</div>}
+              </div>
+              <div>
+                <div className="mb-1 font-medium text-slate-700">未完成任务</div>
+                {brief.openTasks.slice(0, 3).map((task) => <div key={task.id}>{task.title}{task.dueDate ? ` · ${fmtDate(task.dueDate)}` : ""}</div>)}
+                {!brief.openTasks.length && <div>暂无待跟进事项</div>}
+              </div>
+              <div>
+                <div className="mb-1 font-medium text-slate-700">样品历史</div>
+                {brief.sampleSummary.map((sample) => <div key={sample.product.id}>{sample.product.brand} × {sample.quantity}</div>)}
+                {!brief.sampleSummary.length && <div>暂无发放记录</div>}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="拜访类型">
@@ -374,6 +430,23 @@ export function VisitFormDialog({
         <Field label="下一步计划">
           <Input placeholder="如:下周三带最新文献回访" value={nextStep} onChange={(e) => setNextStep(e.target.value)} />
         </Field>
+        {nextStep && (
+          <div className="grid gap-3 rounded-md border border-emerald-100 bg-emerald-50 p-3 md:grid-cols-[1fr_180px_160px]">
+            <label className="flex items-center gap-2 text-sm text-emerald-800">
+              <input type="checkbox" checked={createTask} onChange={(e) => setCreateTask(e.target.checked)} />
+              同时生成可追踪的后续任务
+            </label>
+            <Field label="截止日期">
+              <Input type="date" value={followUpDueDate} onChange={(e) => setFollowUpDueDate(e.target.value)} disabled={!createTask} />
+            </Field>
+            <Field label="优先级">
+              <Select value={followUpPriority} onChange={(e) => setFollowUpPriority(e.target.value)} disabled={!createTask}>
+                <option value="NORMAL">普通</option>
+                <option value="HIGH">高</option>
+              </Select>
+            </Field>
+          </div>
+        )}
 
         {/* 讨论产品 */}
         <div>

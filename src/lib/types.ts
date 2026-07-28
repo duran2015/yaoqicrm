@@ -137,6 +137,13 @@ export interface HcpDetail extends Hcp, HcpProfileFields {
   }[];
   sampleSummary: { product: { id: string; brand: string; molecule: string }; totalQty: number }[];
   stats: { visitCount: number; eventCount: number; lastVisitDate?: string | null };
+  followUpTasks: Array<{
+    id: string;
+    title: string;
+    dueDate?: string | null;
+    priority: string;
+    assignee: { id: string; name: string };
+  }>;
 }
 
 export interface TourPlanItem {

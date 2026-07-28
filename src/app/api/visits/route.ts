@@ -168,6 +168,11 @@ export async function POST(req: NextRequest) {
   }
 
   const tourPlanItemId = body.tourPlanItemId ? String(body.tourPlanItemId) : null;
+  const followUp = body.followUp && typeof body.followUp === "object"
+    ? body.followUp as Record<string, unknown>
+    : null;
+  const followUpDueDate = followUp?.dueDate ? parseDate(String(followUp.dueDate)) : null;
+  if (followUp?.dueDate && !followUpDueDate) return err("followUp.dueDate 不是合法日期");
   const visit = await prisma.$transaction(async (tx) => {
     if (tourPlanItemId) {
       const item = await tx.tourPlanItem.findUnique({
@@ -211,6 +216,20 @@ export async function POST(req: NextRequest) {
         data: {
           visitId: created.id,
           status: status === "SUBMITTED" ? "COMPLETED" : "PLANNED",
+        },
+      });
+    }
+    if (followUp?.title && body.hcpId) {
+      await tx.followUpTask.create({
+        data: {
+          title: String(followUp.title),
+          description: followUp.description ? String(followUp.description) : null,
+          priority: followUp.priority === "HIGH" ? "HIGH" : "NORMAL",
+          dueDate: followUpDueDate,
+          assigneeId: employeeId,
+          hcpId: String(body.hcpId),
+          hcoId: body.hcoId ? String(body.hcoId) : null,
+          sourceVisitId: created.id,
         },
       });
     }
