@@ -7,6 +7,18 @@
 > 演示项目。种子数据基准日为 **2026-07-24**;开源界缺少成熟的 pharma CRM 与 pharma MCP
 > server,本项目为填补该空白的演示实现(设计溯源见 [DESIGN.md](./DESIGN.md))。
 
+## P0 销售日常闭环
+
+当前演示版已打通五条核心产品链路：
+
+- 周计划创建/编辑、审批、周日历与计划转拜访。
+- HCP 拜访前简报、结构化后续任务、完成/取消与复访草稿。
+- 经理待办、异常签到、逾期任务与辅导行动。
+- 样品领用、拜访发放、退回、盘点调整和批次流水。
+- 会议创建、邀请、签到/缺席、结束和批量生成跟进任务。
+
+完整演示步骤见 [Pharma Sales P0 演示脚本](./docs/product/pharma-sales-p0-demo-script.md)。
+
 ## 对照外部 CRM 导出格式的字段补全(第二阶段)
 
 项目支持从外部 CRM 拜访导出格式导入数据,并据此补齐以下领域字段:
@@ -119,6 +131,7 @@ pharma-crm/
 ```bash
 npm run dev            # CRM dev server,端口 5618
 npm run build          # 生产构建(含类型检查与 ESLint)
+npm test               # 领域规则与演示场景测试
 npx prisma migrate dev # 应用迁移
 npx prisma db seed     # 重置并写入种子数据
 npx prisma studio      # 数据浏览
