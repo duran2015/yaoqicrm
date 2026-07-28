@@ -34,6 +34,8 @@ model Employee {
   followUpTasks      FollowUpTask[]       @relation("TaskAssignee")
   managedCoachings   CoachingAction[]     @relation("CoachingManager")
   assignedCoachings  CoachingAction[]     @relation("CoachingEmployee")
+  cyclePlans         CyclePlan[]          @relation("CyclePlanEmployee")
+  createdCyclePlans  CyclePlan[]          @relation("CyclePlanCreator")
 }
 
 // 五级部门树(行政组织,独立于 Territory 辖区):
@@ -179,6 +181,7 @@ model Hcp {
   assignments        CustomerAssignment[]
   tierHistories      CustomerTierHistory[]
   followUpTasks      FollowUpTask[]
+  cyclePlanItems     CyclePlanItem[]
 }
 
 // 产品主数据:品牌→分子→治疗领域
@@ -286,6 +289,40 @@ model TourPlanItem {
   status     String   @default("PLANNED") // PLANNED | COMPLETED | CANCELLED
   visitId    String?  @unique
   visit      Visit?   @relation("PlanItemVisit", fields: [visitId], references: [id])
+}
+
+// 月度客户覆盖目标快照
+model CyclePlan {
+  id           String          @id @default(cuid())
+  employeeId   String
+  employee     Employee        @relation("CyclePlanEmployee", fields: [employeeId], references: [id])
+  month        DateTime
+  status       String          @default("ACTIVE") // ACTIVE | CLOSED
+  frequencyA   Int             @default(4)
+  frequencyB   Int             @default(2)
+  frequencyC   Int             @default(1)
+  frequencyD   Int             @default(0)
+  createdById  String
+  createdBy    Employee        @relation("CyclePlanCreator", fields: [createdById], references: [id])
+  items        CyclePlanItem[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([employeeId, month])
+  @@index([month, status])
+}
+
+model CyclePlanItem {
+  id            String    @id @default(cuid())
+  cyclePlanId   String
+  cyclePlan     CyclePlan @relation(fields: [cyclePlanId], references: [id], onDelete: Cascade)
+  hcpId         String
+  hcp           Hcp       @relation(fields: [hcpId], references: [id])
+  tierSnapshot  String
+  targetVisits  Int
+
+  @@unique([cyclePlanId, hcpId])
+  @@index([hcpId])
 }
 
 // 样品批次
