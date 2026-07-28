@@ -59,6 +59,39 @@ export function monthOverMonth(current: number, previous: number): MonthOverMont
   return { kind: "RATE", value: (current - previous) / previous };
 }
 
+export function summarizeSalesRows(
+  rows: Array<{
+    targetAmountCents: number;
+    actualAmountCents: number;
+    targetQuantity: number;
+    actualQuantity: number;
+  }>
+) {
+  const totals = rows.reduce(
+    (sum, row) => ({
+      targetAmountCents: sum.targetAmountCents + row.targetAmountCents,
+      actualAmountCents: sum.actualAmountCents + row.actualAmountCents,
+      targetQuantity: sum.targetQuantity + row.targetQuantity,
+      actualQuantity: sum.actualQuantity + row.actualQuantity,
+    }),
+    { targetAmountCents: 0, actualAmountCents: 0, targetQuantity: 0, actualQuantity: 0 }
+  );
+  return { ...totals, attainment: attainment(totals.actualAmountCents, totals.targetAmountCents) };
+}
+
+export function formatSalesMoney(cents: number) {
+  return `¥${(cents / 100).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export function formatSalesAttainment(value: number | null) {
+  return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
+}
+
+export function formatSalesMom(value: MonthOverMonth | null) {
+  if (!value) return "—";
+  return value.kind === "NEW" ? "新增" : `${(value.value * 100).toFixed(1)}%`;
+}
+
 function quantity(value: unknown) {
   const text = typeof value === "string" ? value.trim() : String(value ?? "");
   return /^\d+$/.test(text) && Number.isSafeInteger(Number(text)) ? Number(text) : null;

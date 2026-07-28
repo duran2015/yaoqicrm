@@ -3,9 +3,13 @@ import test from "node:test";
 import {
   attainment,
   dedupeSalesRows,
+  formatSalesAttainment,
+  formatSalesMom,
+  formatSalesMoney,
   monthOverMonth,
   parseSalesCsv,
   parseSalesMonth,
+  summarizeSalesRows,
   yuanToCents,
 } from "./sales-results";
 
@@ -72,4 +76,25 @@ test("rejects CSV input above 5000 data rows", () => {
   const parsed = parseSalesCsv([header, ...Array.from({ length: 5001 }, () => row)].join("\n"));
   assert.equal(parsed.validRows.length, 0);
   assert.match(parsed.errors[0].message, /5,000/);
+});
+
+test("summarizes sales facts using summed amounts instead of averaging rates", () => {
+  assert.deepEqual(summarizeSalesRows([
+    { targetAmountCents: 100, actualAmountCents: 50, targetQuantity: 10, actualQuantity: 5 },
+    { targetAmountCents: 300, actualAmountCents: 300, targetQuantity: 30, actualQuantity: 30 },
+  ]), {
+    targetAmountCents: 400,
+    actualAmountCents: 350,
+    targetQuantity: 40,
+    actualQuantity: 35,
+    attainment: 0.875,
+  });
+});
+
+test("formats sales presentation values without inventing zero-baseline growth", () => {
+  assert.equal(formatSalesMoney(123456), "¥1,234.56");
+  assert.equal(formatSalesAttainment(null), "—");
+  assert.equal(formatSalesAttainment(0.875), "87.5%");
+  assert.equal(formatSalesMom({ kind: "NEW", value: null }), "新增");
+  assert.equal(formatSalesMom({ kind: "RATE", value: -0.1 }), "-10.0%");
 });
