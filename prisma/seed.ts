@@ -47,6 +47,8 @@ function genPurposes(): string[] {
 
 async function main() {
   console.log("清空旧数据...");
+  await prisma.cyclePlanItem.deleteMany();
+  await prisma.cyclePlan.deleteMany();
   await prisma.followUpTask.deleteMany();
   await prisma.coachingAction.deleteMany();
   await prisma.checkIn.deleteMany();
@@ -59,6 +61,7 @@ async function main() {
   await prisma.tourPlan.deleteMany();
   await prisma.visit.deleteMany();
   await prisma.target.deleteMany();
+  await prisma.customerAssignment.deleteMany();
   await prisma.hcp.deleteMany();
   await prisma.hco.deleteMany();
   await prisma.product.deleteMany();
@@ -201,6 +204,19 @@ async function main() {
     });
   }
 
+  // ---------- HCP 负责人归属:同事业部内确定性轮转 ----------
+  console.log("创建客户负责人归属...");
+  const ownerAssignments: Array<{ hcpId: string; employeeId: string }> = [];
+  for (const division of ["肿瘤线", "心血管线"]) {
+    const divisionMrs = mrs.filter((mr) => mr.division === division);
+    hcps.filter((hcp) => hcp.division === division).forEach((hcp, index) => {
+      ownerAssignments.push({ hcpId: hcp.id, employeeId: divisionMrs[index % divisionMrs.length].id });
+    });
+  }
+  await prisma.customerAssignment.createMany({
+    data: ownerAssignments.map((assignment) => ({ ...assignment, role: "OWNER" })),
+  });
+
   // ---------- 6 个产品 ----------
   console.log("创建产品...");
   const productDefs = [
@@ -251,6 +267,31 @@ async function main() {
         },
       });
     }
+  }
+
+  // ---------- 2026-07 月度 Cycle Plan:按客户分级生成目标快照 ----------
+  console.log("创建月度客户覆盖计划...");
+  const cycleMonth = new Date("2026-07-01T00:00:00+08:00");
+  const tierFrequency: Record<string, number> = { A: 4, B: 2, C: 1, D: 0 };
+  for (const mr of mrs) {
+    const myAssignments = ownerAssignments.filter((assignment) => assignment.employeeId === mr.id);
+    await prisma.cyclePlan.create({
+      data: {
+        employeeId: mr.id,
+        createdById: mr.bossId,
+        month: cycleMonth,
+        frequencyA: 4,
+        frequencyB: 2,
+        frequencyC: 1,
+        frequencyD: 0,
+        items: {
+          create: myAssignments.map((assignment) => {
+            const hcp = hcps.find((candidate) => candidate.id === assignment.hcpId)!;
+            return { hcpId: hcp.id, tierSnapshot: hcp.tier, targetVisits: tierFrequency[hcp.tier] ?? 0 };
+          }),
+        },
+      },
+    });
   }
 
   // ---------- 拜访数据:近 14 天,每个 MR 每天 4-8 条 ----------
@@ -417,6 +458,37 @@ async function main() {
       }
     }
   }
+
+  // 将三名肿瘤线代表塑造成“高达成 / 进行中 / 明显落后”三种月度覆盖演示状态。
+  // 原始拜访仍保留，仅用 DRAFT/SUBMITTED 表达是否已正式提交并计入覆盖。
+  async function shapeCycleAchievement(mrId: string, desiredRate: number) {
+    const plan = await prisma.cyclePlan.findFirst({
+      where: { employeeId: mrId, month: cycleMonth },
+      include: { items: true },
+    });
+    if (!plan) return;
+    const hcpIds = plan.items.map((item) => item.hcpId);
+    await prisma.visit.updateMany({
+      where: { employeeId: mrId, hcpId: { in: hcpIds } },
+      data: { status: "DRAFT" },
+    });
+    let remaining = Math.round(plan.items.reduce((sum, item) => sum + item.targetVisits, 0) * desiredRate);
+    for (const item of plan.items) {
+      if (remaining <= 0) break;
+      const visits = await prisma.visit.findMany({
+        where: { employeeId: mrId, hcpId: item.hcpId },
+        select: { id: true },
+        orderBy: { visitDate: "desc" },
+        take: Math.min(item.targetVisits, remaining),
+      });
+      if (visits.length) {
+        await prisma.visit.updateMany({ where: { id: { in: visits.map((visit) => visit.id) } }, data: { status: "SUBMITTED" } });
+        remaining -= visits.length;
+      }
+    }
+  }
+  await shapeCycleAchievement(mrs[1].id, 0.55);
+  await shapeCycleAchievement(mrs[2].id, 0);
 
   // ---------- 本周 TourPlan(weekStart = 2026-07-20) ----------
   console.log("创建周拜访计划...");
@@ -608,7 +680,7 @@ async function main() {
   console.log(`  员工 ${await prisma.employee.count()},部门 ${await prisma.department.count()},辖区 ${await prisma.territory.count()},机构 ${await prisma.hco.count()}`);
   console.log(`  HCP ${await prisma.hcp.count()},产品 ${await prisma.product.count()},批次 ${await prisma.sampleLot.count()}`);
   console.log(`  拜访 ${visitCount}(有效 ${validCount} / 无效 ${invalidCount} / 待评定 ${pendingCount}),签到 ${await prisma.checkIn.count()}(地点异常 ${mismatchCount})`);
-  console.log(`  样品事务 ${await prisma.sampleTransaction.count()},计划 ${await prisma.tourPlan.count()},会议 ${await prisma.medEvent.count()},指标 ${await prisma.target.count()}`);
+  console.log(`  样品事务 ${await prisma.sampleTransaction.count()},周计划 ${await prisma.tourPlan.count()},月度计划 ${await prisma.cyclePlan.count()},会议 ${await prisma.medEvent.count()},指标 ${await prisma.target.count()}`);
 }
 
 main()
