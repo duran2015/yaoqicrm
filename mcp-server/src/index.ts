@@ -863,6 +863,70 @@ tool(
     ),
 );
 
+// 28. complete_hcp_visit ------------------------------------------------------
+tool(
+  "complete_hcp_visit",
+  {
+    title: "确认并完成 HCP 拜访",
+    description:
+      "在用户明确确认后,以当前 WorkBuddy 登录代表身份一次写入拜访、资料/样品使用、签到和可选后续任务。必须提供稳定 idempotencyKey;相同内容重试返回原拜访,不会重复创建。",
+    inputSchema: {
+      idempotencyKey: z.string().min(8).max(128).describe("本次业务操作的稳定唯一键;网络重试必须复用同一个值"),
+      confirmed: z.boolean().describe("只有用户明确确认写入 CRM 后才能传 true"),
+      hcpId: z.string().describe("拜访医生 id"),
+      hcoId: z.string().optional().describe("拜访机构 id;缺省可留空"),
+      visitDate: z.string().optional().describe("ISO 8601 拜访时间,缺省当前时间"),
+      type: z.enum(["FACE_TO_FACE", "PHONE", "CONFERENCE", "JOINT"]).optional(),
+      purposes: z
+        .array(z.enum(["产品信息传递", "临床信息沟通", "市场现状调研", "学术会议沟通", "其他"]))
+        .optional(),
+      outcome: z.string().optional(),
+      duration: z.number().int().positive().optional(),
+      notes: z.string().optional(),
+      summary: z.string().optional(),
+      nextStep: z.string().optional(),
+      tourPlanItemId: z.string().optional().describe("从已批准计划转拜访时传计划项 id"),
+      products: z.array(z.object({
+        productId: z.string(),
+        feedback: z.string().optional(),
+      })).optional(),
+      materialIds: z.array(z.string()).optional().describe("本次实际使用的已批准资料 id"),
+      samples: z.array(z.object({
+        lotId: z.string(),
+        quantity: z.number().int().positive(),
+        confirmedByHcp: z.boolean().optional(),
+      })).optional(),
+      checkin: z.object({
+        locationName: z.string(),
+        latitude: z.number().optional(),
+        longitude: z.number().optional(),
+      }).optional(),
+      followUp: z.object({
+        title: z.string(),
+        description: z.string().optional(),
+        priority: z.enum(["NORMAL", "HIGH"]).optional(),
+        dueDate: z.string().optional(),
+      }).optional(),
+    },
+  },
+  async ({ idempotencyKey, confirmed, checkin, ...visit }) =>
+    callTool(() =>
+      crmFetch("/api/agent/complete-visit", {
+        method: "POST",
+        body: {
+          employeeId: requireEmployee(context),
+          idempotencyKey,
+          requestId: randomUUID(),
+          confirmed,
+          visit: {
+            ...visit,
+            ...(checkin ? { checkins: [checkin] } : {}),
+          },
+        },
+      }),
+    ),
+);
+
   toolCount = count;
   return server;
 }

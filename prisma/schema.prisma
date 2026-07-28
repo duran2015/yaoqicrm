@@ -41,6 +41,7 @@ model Employee {
   accountMilestones   AccountMilestone[]   @relation("AccountMilestoneOwner")
   salesResults        SalesResult[]
   salesImportBatches  SalesImportBatch[]
+  mcpOperations       McpOperation[]
 }
 
 // 五级部门树(行政组织,独立于 Territory 辖区):
@@ -196,19 +197,19 @@ model Hcp {
 
 // HCP 多机构、多科室任职；Hcp 上的 hcoId/specialty/title/adminDuty 为当前主要任职兼容字段
 model HcpAffiliation {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   hcpId          String
-  hcp            Hcp      @relation(fields: [hcpId], references: [id], onDelete: Cascade)
+  hcp            Hcp       @relation(fields: [hcpId], references: [id], onDelete: Cascade)
   hcoId          String
-  hco            Hco      @relation(fields: [hcoId], references: [id], onDelete: Restrict)
+  hco            Hco       @relation(fields: [hcoId], references: [id], onDelete: Restrict)
   departmentName String
   title          String?
   adminDuty      String?
-  isPrimary      Boolean  @default(false)
+  isPrimary      Boolean   @default(false)
   effectiveDate  DateTime
   endDate        DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@unique([hcpId, hcoId, departmentName, effectiveDate])
   @@index([hcpId, isPrimary])
@@ -229,19 +230,19 @@ model Product {
   targets             Target[]
   hcoProducts         HcoProduct[]
   accountPlanProducts AccountPlanProduct[]
-  salesResults         SalesResult[]
-  materials            ProductMaterial[]
+  salesResults        SalesResult[]
+  materials           ProductMaterial[]
 }
 
 // 拜访记录 DCR(最核心事实表)
 model Visit {
-  id              String              @id @default(cuid())
+  id              String               @id @default(cuid())
   employeeId      String
-  employee        Employee            @relation(fields: [employeeId], references: [id])
+  employee        Employee             @relation(fields: [employeeId], references: [id])
   hcpId           String?
-  hcp             Hcp?                @relation(fields: [hcpId], references: [id])
+  hcp             Hcp?                 @relation(fields: [hcpId], references: [id])
   hcoId           String?
-  hco             Hco?                @relation(fields: [hcoId], references: [id])
+  hco             Hco?                 @relation(fields: [hcoId], references: [id])
   visitDate       DateTime
   type            String // FACE_TO_FACE | PHONE | CONFERENCE | JOINT(协同拜访)
   purpose         String? // 拜访目的(旧自由文本字段,向后兼容保留)
@@ -253,25 +254,25 @@ model Visit {
   nextStep        String? // 下一步计划
   aiSummary       String? // AI 富化:摘要(预留给 AI 工具写)
   aiSentiment     String? // AI 富化:情感倾向 POSITIVE|NEUTRAL|NEGATIVE
-  source          String              @default("MANUAL") // 数据来源:MANUAL | AI | IMPORT
-  status          String              @default("SUBMITTED") // DRAFT | SUBMITTED
+  source          String               @default("MANUAL") // 数据来源:MANUAL | AI | IMPORT
+  status          String               @default("SUBMITTED") // DRAFT | SUBMITTED
   receiverId      String? // 报告接收人(上级),默认=填写人的直属上级
-  receiver        Employee?           @relation("VisitReceiver", fields: [receiverId], references: [id])
+  receiver        Employee?            @relation("VisitReceiver", fields: [receiverId], references: [id])
   // 有效性评定(经理对接收到的拜访做有效/无效反馈)
-  validityStatus  String              @default("PENDING") // PENDING=未反馈 | VALID=有效 | INVALID=无效
+  validityStatus  String               @default("PENDING") // PENDING=未反馈 | VALID=有效 | INVALID=无效
   evaluatedById   String?
-  evaluatedBy     Employee?           @relation("VisitEvaluator", fields: [evaluatedById], references: [id])
+  evaluatedBy     Employee?            @relation("VisitEvaluator", fields: [evaluatedById], references: [id])
   evaluatedAt     DateTime?
   invalidReason   String? // 无效原因:重复 | 内容过短 | 签到地点不对 | 结果未体现 …
   jointWithId     String? // 协同拜访的同事
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
   products        VisitProduct[]
   samples         SampleTransaction[]
   checkins        CheckIn[]
-  tourPlanItem    TourPlanItem?       @relation("PlanItemVisit")
-  sourceTasks     FollowUpTask[]      @relation("TaskSourceVisit")
-  followUpTasks   FollowUpTask[]      @relation("TaskFollowUpVisit")
+  tourPlanItem    TourPlanItem?        @relation("PlanItemVisit")
+  sourceTasks     FollowUpTask[]       @relation("TaskSourceVisit")
+  followUpTasks   FollowUpTask[]       @relation("TaskFollowUpVisit")
   materialUsages  VisitMaterialUsage[]
   coachingActions CoachingAction[]
 }
@@ -579,39 +580,39 @@ model Target {
 
 // 月度销售结果事实：月份 × 产品 × HCO × 代表
 model SalesResult {
-  id                   String            @id @default(cuid())
-  month                DateTime
-  productId            String
-  product              Product           @relation(fields: [productId], references: [id])
-  hcoId                String
-  hco                  Hco               @relation(fields: [hcoId], references: [id])
-  employeeId           String
-  employee             Employee          @relation(fields: [employeeId], references: [id])
-  targetAmountCents    Int
-  actualAmountCents    Int
-  targetQuantity       Int
-  actualQuantity       Int
-  importBatchId        String?
-  importBatch          SalesImportBatch? @relation(fields: [importBatchId], references: [id])
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  id                String            @id @default(cuid())
+  month             DateTime
+  productId         String
+  product           Product           @relation(fields: [productId], references: [id])
+  hcoId             String
+  hco               Hco               @relation(fields: [hcoId], references: [id])
+  employeeId        String
+  employee          Employee          @relation(fields: [employeeId], references: [id])
+  targetAmountCents Int
+  actualAmountCents Int
+  targetQuantity    Int
+  actualQuantity    Int
+  importBatchId     String?
+  importBatch       SalesImportBatch? @relation(fields: [importBatchId], references: [id])
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@unique([month, productId, hcoId, employeeId])
   @@index([month])
 }
 
 model SalesImportBatch {
-  id            String        @id @default(cuid())
-  fileName      String
-  importedById  String
-  importedBy    Employee      @relation(fields: [importedById], references: [id])
-  status        String
-  totalRows     Int
-  successRows   Int
-  failedRows    Int
-  errorSummary  String?
-  results       SalesResult[]
-  createdAt     DateTime      @default(now())
+  id           String        @id @default(cuid())
+  fileName     String
+  importedById String
+  importedBy   Employee      @relation(fields: [importedById], references: [id])
+  status       String
+  totalRows    Int
+  successRows  Int
+  failedRows   Int
+  errorSummary String?
+  results      SalesResult[]
+  createdAt    DateTime      @default(now())
 
   @@index([createdAt])
 }
@@ -720,4 +721,27 @@ model CustomerApplication {
   pool         String? // 客户池:架构客户池 | 业绩客户池
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+// WorkBuddy → MCP → CRM 写操作的最小幂等与审计记录
+model McpOperation {
+  id             String    @id @default(cuid())
+  employeeId     String
+  employee       Employee  @relation(fields: [employeeId], references: [id])
+  toolName       String
+  idempotencyKey String
+  requestId      String
+  inputHash      String
+  inputSummary   String
+  status         String    @default("IN_PROGRESS") // IN_PROGRESS | SUCCEEDED | FAILED
+  entityType     String?
+  entityId       String?
+  resultJson     String?
+  errorMessage   String?
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
+
+  @@unique([employeeId, toolName, idempotencyKey])
+  @@index([createdAt])
+  @@index([employeeId, status, createdAt])
 }
