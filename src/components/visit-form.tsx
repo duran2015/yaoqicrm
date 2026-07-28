@@ -11,6 +11,7 @@ import { useUser } from "@/lib/context";
 interface SampleRow {
   lotId: string;
   quantity: string;
+  confirmedByHcp: boolean;
 }
 
 interface VisitBrief {
@@ -184,7 +185,7 @@ export function VisitFormDialog({
       setError("时长必须为正整数(分钟)");
       return;
     }
-    const samples: { lotId: string; quantity: number }[] = [];
+    const samples: { lotId: string; quantity: number; confirmedByHcp: boolean }[] = [];
     for (const row of sampleRows) {
       if (!row.lotId) {
         setError("请选择样品批次");
@@ -195,7 +196,7 @@ export function VisitFormDialog({
         setError("样品数量必须为正整数");
         return;
       }
-      samples.push({ lotId: row.lotId, quantity: qty });
+      samples.push({ lotId: row.lotId, quantity: qty, confirmedByHcp: row.confirmedByHcp });
     }
 
     setSubmitting(true);
@@ -481,7 +482,7 @@ export function VisitFormDialog({
         <div>
           <div className="mb-1 flex items-center justify-between">
             <span className="text-xs font-medium text-slate-600">发放样品(显示当前库存)</span>
-            <Button variant="outline" size="sm" onClick={() => setSampleRows((rows) => [...rows, { lotId: "", quantity: "" }])}>
+            <Button variant="outline" size="sm" onClick={() => setSampleRows((rows) => [...rows, { lotId: "", quantity: "", confirmedByHcp: false }])}>
               + 添加样品
             </Button>
           </div>
@@ -507,6 +508,10 @@ export function VisitFormDialog({
                       value={row.quantity}
                       onChange={(e) => updateSampleRow(i, { quantity: e.target.value })}
                     />
+                    <label className="flex shrink-0 items-center gap-1 text-xs text-slate-500">
+                      <input type="checkbox" checked={row.confirmedByHcp} onChange={(e) => updateSampleRow(i, { confirmedByHcp: e.target.checked })} />
+                      已确认签收
+                    </label>
                     {lot && (
                       <Badge tone={lot.stock < 10 ? "red" : "emerald"}>库存 {lot.stock}</Badge>
                     )}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { err } from "@/lib/api";
+import { signedQuantity } from "@/lib/sample-inventory";
 
 /**
  * GET /api/samples/inventory?employeeId= — 代表样品库存
@@ -43,14 +44,13 @@ export async function GET(req: NextRequest) {
     if (t.type === "RECEIVE") {
       prod.received += t.quantity;
       lot.received += t.quantity;
-    } else {
+    } else if (t.type === "DISTRIBUTE") {
       prod.distributed += t.quantity;
       lot.distributed += t.quantity;
     }
-  }
-  for (const prod of byProduct.values()) {
-    prod.current = prod.received - prod.distributed;
-    for (const lot of prod.lots) lot.current = lot.received - lot.distributed;
+    const effect = signedQuantity(t.type, t.quantity);
+    prod.current += effect;
+    lot.current += effect;
   }
 
   return NextResponse.json({

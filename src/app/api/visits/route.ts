@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { err, parseDate } from "@/lib/api";
 import { visitInclude } from "@/lib/visit-include";
 import { Prisma } from "@prisma/client";
+import { calculateInventory } from "@/lib/workflow";
 
 const VISIT_TYPES = ["FACE_TO_FACE", "PHONE", "CONFERENCE", "JOINT"];
 const VISIT_SOURCES = ["MANUAL", "AI", "IMPORT"];
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
       where: { employeeId, lot: { productId: lot.productId } },
       select: { quantity: true, type: true },
     });
-    const available = txns.reduce((sum, t) => sum + (t.type === "RECEIVE" ? t.quantity : -t.quantity), 0);
+    const available = calculateInventory(txns);
     if (quantity > available) {
       return err(`样品库存不足:当前可发放 ${available} 盒,申请发放 ${quantity} 盒`, 409);
     }
@@ -136,6 +137,7 @@ export async function POST(req: NextRequest) {
       employee: { connect: { id: employeeId } },
       quantity,
       type: "DISTRIBUTE",
+      confirmedByHcp: s.confirmedByHcp === true,
       hcp: body.hcpId ? { connect: { id: String(body.hcpId) } } : undefined,
     });
   }
