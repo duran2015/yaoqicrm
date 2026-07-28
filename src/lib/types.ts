@@ -327,6 +327,32 @@ export interface DashboardData {
   pendingEvaluations?: number;
 }
 
+export interface RepresentativeWorkbenchData {
+  asOf: string;
+  todaySchedule: Array<{
+    id: string;
+    planDate: string;
+    status: string;
+    visitId?: string | null;
+    hcoName?: string | null;
+    note?: string | null;
+    tourPlan: { id: string; status: string };
+    hcp?: { id: string; name: string; title?: string | null; tier?: string | null; hco?: { id: string; name: string } | null } | null;
+  }>;
+  followUps: FollowUpTask[];
+  recommendations: Array<{
+    id: string;
+    hcp: { id: string; name: string; title?: string | null; tier?: string | null; hco?: { id: string; name: string } | null };
+    tier: string;
+    targetVisits: number;
+    completedVisits: number;
+    remainingVisits: number;
+    lastVisitDate?: string | null;
+    reason: string;
+  }>;
+  recommendationEmptyReason?: string | null;
+}
+
 export interface TerritoryRow {
   employee: { id: string; name: string; division: string; territory?: TerritoryRef | null };
   visitCount: number;
