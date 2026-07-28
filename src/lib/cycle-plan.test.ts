@@ -82,9 +82,9 @@ test("builds an encoded weekly plan handoff URL", () => {
 test("aggregates team cycle states", () => {
   assert.deepEqual(
     summarizeTeamCycles([
-      { employeeId: "e1", employeeName: "高达成", targetVisits: 10, completedVisits: 9, uncoveredCustomers: 0 },
-      { employeeId: "e2", employeeName: "进行中", targetVisits: 10, completedVisits: 5, uncoveredCustomers: 2 },
-      { employeeId: "e3", employeeName: "落后", targetVisits: 10, completedVisits: 1, uncoveredCustomers: 5 },
+      { employeeId: "e1", employeeName: "高达成", targetVisits: 10, completedVisits: 9, achievementRate: 0.9, uncoveredCustomers: 0 },
+      { employeeId: "e2", employeeName: "进行中", targetVisits: 10, completedVisits: 5, achievementRate: 0.5, uncoveredCustomers: 2 },
+      { employeeId: "e3", employeeName: "落后", targetVisits: 10, completedVisits: 1, achievementRate: 0.1, uncoveredCustomers: 5 },
     ]),
     {
       targetVisits: 30,

@@ -206,3 +206,12 @@ README 写明入口、三种场景和切换主要任职演示步骤；将完成�
 git add README.md docs/superpowers/plans/2026-07-28-hcp-affiliations-lite.md
 git commit -m "docs: add HCP affiliation demo guide"
 ```
+
+## Execution Record
+
+- Completed: 2026-07-28
+- Domain tests: 48/48 passed
+- Database reset: 32 affiliation records, zero current-primary conflicts, two current affiliations on `DR0001`
+- Static checks: ESLint, `tsc --noEmit`, Prisma validation and `git diff --check` passed
+- Production build: 58 pages/routes generated successfully
+- Browser flow: primary switch updated compatibility fields; ending the primary promoted the remaining current affiliation and retained the ended record as history
