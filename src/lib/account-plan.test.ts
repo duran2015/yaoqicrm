@@ -9,6 +9,7 @@ import {
   summarizeMilestones,
   validateAccountPlanInput,
   validateMilestoneInput,
+  parseAccountPlanStrategyInput,
 } from "./account-plan";
 
 test("accepts only integer account plan years from 2020 through 2100", () => {
@@ -106,4 +107,27 @@ test("validates milestone owner, title, and date", () => {
   assert.equal(validateMilestoneInput({ title: "", ownerId: "owner-1", dueDate: "2026-08-15" }), null);
   assert.equal(validateMilestoneInput({ title: "完成材料", ownerId: "", dueDate: "2026-08-15" }), null);
   assert.equal(validateMilestoneInput({ title: "完成材料", ownerId: "owner-1", dueDate: "bad" }), null);
+});
+
+test("parses trimmed Account Plan strategy text with optional situation", () => {
+  assert.deepEqual(parseAccountPlanStrategyInput({
+    businessGoal: " 提升重点科室覆盖 ",
+    situation: " ",
+    strategy: " 建立决策人共识 ",
+    successCriteria: " 完成准入并实现首批使用 ",
+  }), {
+    businessGoal: "提升重点科室覆盖",
+    situation: null,
+    strategy: "建立决策人共识",
+    successCriteria: "完成准入并实现首批使用",
+  });
+});
+
+test("rejects incomplete Account Plan strategy text", () => {
+  assert.equal(parseAccountPlanStrategyInput({
+    businessGoal: "",
+    situation: null,
+    strategy: "建立决策人共识",
+    successCriteria: "完成准入",
+  }), null);
 });

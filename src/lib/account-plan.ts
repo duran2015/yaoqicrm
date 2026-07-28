@@ -31,6 +31,13 @@ export type AccountPlanInput = {
   milestones: MilestoneInput[];
 };
 
+export type AccountPlanStrategyInput = {
+  businessGoal: string;
+  situation: string | null;
+  strategy: string;
+  successCriteria: string;
+};
+
 const ACCOUNT_PLAN_TRANSITIONS: Record<string, string[]> = { ACTIVE: ["CLOSED"], CLOSED: [] };
 const MILESTONE_TRANSITIONS: Record<string, string[]> = { OPEN: ["DONE", "CANCELLED"], DONE: [], CANCELLED: [] };
 const DECISION_ROLES = new Set(["DECISION_MAKER", "INFLUENCER", "SUPPORTER"]);
@@ -109,6 +116,21 @@ export function validateMilestoneInput(value: unknown): MilestoneInput | null {
   const dueDate = parseBusinessDate(candidate.dueDate);
   if (!title || !ownerId || !dueDate) return null;
   return { title, description: optionalString(candidate.description), ownerId, dueDate };
+}
+
+export function parseAccountPlanStrategyInput(value: unknown): AccountPlanStrategyInput | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const businessGoal = requiredString(candidate.businessGoal);
+  const strategy = requiredString(candidate.strategy);
+  const successCriteria = requiredString(candidate.successCriteria);
+  if (!businessGoal || !strategy || !successCriteria) return null;
+  return {
+    businessGoal,
+    situation: optionalString(candidate.situation),
+    strategy,
+    successCriteria,
+  };
 }
 
 export function validateAccountPlanInput(value: unknown): AccountPlanInput | null {
