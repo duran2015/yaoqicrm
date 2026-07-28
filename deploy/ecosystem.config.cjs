@@ -5,17 +5,19 @@
  * 注意:
  * - ROOT 自动解析为项目根目录(deploy/ 的上一级)
  * - DATABASE_URL 指向绝对路径的 SQLite 文件,与本地 .env 的相对路径无关
- * - MCP_AUTH_TOKEN 必须由部署环境提供,避免把凭据写进仓库
+ * - WORKBUDDY_JWT_SECRET 必须由部署环境提供,避免把凭据写进仓库
  */
 const path = require("node:path");
 
 const ROOT = path.resolve(__dirname, "..");
 const DB_PATH = path.join(ROOT, "prisma", "dev.db");
-const MCP_AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
+const WORKBUDDY_JWT_SECRET = process.env.WORKBUDDY_JWT_SECRET;
+const WORKBUDDY_JWT_ISSUER = process.env.WORKBUDDY_JWT_ISSUER || "workbuddy-local";
+const WORKBUDDY_JWT_AUDIENCE = process.env.WORKBUDDY_JWT_AUDIENCE || "pharma-crm-mcp";
 const CRM_HOST = process.env.CRM_HOST || "127.0.0.1";
 
-if (!MCP_AUTH_TOKEN) {
-  throw new Error("MCP_AUTH_TOKEN is required (generate one with: openssl rand -hex 32)");
+if (!WORKBUDDY_JWT_SECRET) {
+  throw new Error("WORKBUDDY_JWT_SECRET is required (generate one with: openssl rand -hex 32)");
 }
 
 module.exports = {
@@ -43,7 +45,9 @@ module.exports = {
         MCP_PORT: 5620,
         MCP_HOST: "0.0.0.0",
         CRM_BASE_URL: "http://localhost:5618/pharma",
-        MCP_AUTH_TOKEN,
+        WORKBUDDY_JWT_SECRET,
+        WORKBUDDY_JWT_ISSUER,
+        WORKBUDDY_JWT_AUDIENCE,
       },
       max_restarts: 10,
       restart_delay: 3000,

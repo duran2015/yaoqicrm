@@ -10,19 +10,19 @@
 - 能 SSH 登录(`user@host`,推荐配置免密 key)
 - PM2 无需预装——脚本会自动 `npm i -g pm2`(可能需要 sudo)
 - CRM 默认仅监听 `127.0.0.1:5618`,请通过带认证的 nginx 等反向代理访问
-- 如需远程 MCP,开放 **5620** 并配置 Bearer Token;也建议通过反向代理/IP 白名单访问
+- 如需远程 MCP,开放 **5620** 或配置 nginx 反向代理，并配置 WorkBuddy 用户 JWT
 
 **本地端:**
 - 本项目完整工作区
 - `rsync`、`ssh` 可用
-- 已设置强随机 `MCP_AUTH_TOKEN`
+- 已设置强随机 `WORKBUDDY_JWT_SECRET`
 
 ## 一键部署
 
 ```bash
 # 在项目根目录执行
-MCP_AUTH_TOKEN=$(openssl rand -hex 32) ./deploy/deploy.sh user@1.2.3.4
-MCP_AUTH_TOKEN=<已有token> ./deploy/deploy.sh user@1.2.3.4 ~/.ssh/id_rsa
+WORKBUDDY_JWT_SECRET=$(openssl rand -hex 32) ./deploy/deploy.sh user@1.2.3.4
+WORKBUDDY_JWT_SECRET=<双方共享密钥> ./deploy/deploy.sh user@1.2.3.4 ~/.ssh/id_rsa
 
 # 可选环境变量:
 UPLOAD_DB=1 ./deploy/deploy.sh user@host # 显式上传/替换本地数据库(谨慎使用)
@@ -43,12 +43,12 @@ APP_DIR=/srv/crm ./deploy/deploy.sh user@host   # 强制指定远端目录
 | `pharma-crm` | Next standalone server(`NODE_ENV=production`,默认仅本机监听) | 5618 |
 | `pharma-crm-mcp` | MCP server HTTP 模式(`--http`,`CRM_BASE_URL=http://localhost:5618`) | 5620 |
 
-## MCP_AUTH_TOKEN
+## WorkBuddy 用户 JWT
 
 部署前必须通过环境变量提供强随机 token;未提供时脚本和 PM2 配置都会拒绝启动:
 
 ```bash
-export MCP_AUTH_TOKEN=$(openssl rand -hex 32)
+export WORKBUDDY_JWT_SECRET=$(openssl rand -hex 32)
 ./deploy/deploy.sh user@host
 ```
 
@@ -59,13 +59,13 @@ AI 工具侧远程 MCP 配置(URL + Authorization 头):
   "mcpServers": {
     "pharma-crm": {
       "url": "http://<服务器IP或域名>:5620/mcp",
-      "headers": { "Authorization": "Bearer <同一个 token>" }
+      "headers": { "Authorization": "Bearer <WorkBuddy为当前用户签发的短期JWT>" }
     }
   }
 }
 ```
 
-验证:`curl http://<服务器>:5620/health -H "Authorization: Bearer <token>"` → `{"ok":true,"tools":25}`
+验证:`curl http://<服务器>:5620/health` → `{"ok":true,"tools":27}`
 
 ## 数据备份
 

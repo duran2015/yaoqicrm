@@ -6,7 +6,7 @@
 #   ./deploy/deploy.sh <user@host> [ssh_key路径]
 #
 # 环境变量(可选):
-#   MCP_AUTH_TOKEN  必填;MCP HTTP Bearer token(建议:openssl rand -hex 32)
+#   WORKBUDDY_JWT_SECRET  必填;WorkBuddy HS256 JWT 共享密钥(建议:openssl rand -hex 32)
 #   UPLOAD_DB=1     显式上传/替换远端 prisma/dev.db(默认不上传,避免误传真实数据)
 #   APP_DIR      强制指定远端目标目录(默认 /opt/pharma-crm,无权限时回退 ~/pharma-crm)
 #
@@ -20,14 +20,16 @@ set -euo pipefail
 
 REMOTE="${1:-}"
 SSH_KEY="${2:-}"
-MCP_AUTH_TOKEN="${MCP_AUTH_TOKEN:-}"
+WORKBUDDY_JWT_SECRET="${WORKBUDDY_JWT_SECRET:-}"
+WORKBUDDY_JWT_ISSUER="${WORKBUDDY_JWT_ISSUER:-workbuddy-local}"
+WORKBUDDY_JWT_AUDIENCE="${WORKBUDDY_JWT_AUDIENCE:-pharma-crm-mcp}"
 
 if [[ -z "$REMOTE" ]]; then
   echo "用法: $0 <user@host> [ssh_key路径]" >&2
   exit 1
 fi
-if [[ -z "$MCP_AUTH_TOKEN" ]]; then
-  echo "必须设置 MCP_AUTH_TOKEN(建议:MCP_AUTH_TOKEN=\$(openssl rand -hex 32) $0 ...)" >&2
+if [[ -z "$WORKBUDDY_JWT_SECRET" ]]; then
+  echo "必须设置 WORKBUDDY_JWT_SECRET(建议:WORKBUDDY_JWT_SECRET=\$(openssl rand -hex 32) $0 ...)" >&2
   exit 1
 fi
 
@@ -80,7 +82,8 @@ fi
 
 # ---------------------------------------------------------------- 4-8. 远端执行
 step "4/8 远端:环境检查 → 依赖 → 构建 → 数据库落位 → PM2 启动"
-ssh "${SSH_OPTS[@]}" "$REMOTE" "TARGET='$TARGET' UPLOAD_DB='${UPLOAD_DB:-0}' MCP_AUTH_TOKEN='$MCP_AUTH_TOKEN' bash -s" <<'REMOTE_EOF'
+ssh "${SSH_OPTS[@]}" "$REMOTE" \
+  "TARGET='$TARGET' UPLOAD_DB='${UPLOAD_DB:-0}' WORKBUDDY_JWT_SECRET='$WORKBUDDY_JWT_SECRET' WORKBUDDY_JWT_ISSUER='$WORKBUDDY_JWT_ISSUER' WORKBUDDY_JWT_AUDIENCE='$WORKBUDDY_JWT_AUDIENCE' bash -s" <<'REMOTE_EOF'
 set -euo pipefail
 cd "$TARGET"
 step() { echo; echo "  [remote] ===> $*"; }
