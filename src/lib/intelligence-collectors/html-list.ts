@@ -10,7 +10,10 @@ type HtmlConfig = {
 };
 
 export function parseHtmlList(html: string, baseUrl: URL, config: HtmlConfig, limit: number) {
-  const { document } = parseHTML(html);
+  const expandedHtml = html
+    .replace(/<record>\s*<!\[CDATA\[/gi, "")
+    .replace(/\]\]>\s*<\/record>/gi, "");
+  const { document } = parseHTML(expandedHtml);
   const select = (item: Element, selector: string) => item.matches(selector) ? item : item.querySelector(selector);
   return [...document.querySelectorAll(config.itemSelector)].slice(0, limit).flatMap((item) => {
     const title = select(item, config.titleSelector)?.textContent?.trim();

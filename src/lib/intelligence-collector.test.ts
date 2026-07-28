@@ -75,3 +75,18 @@ test("HTML list extraction can use the matched link element itself", () => {
     { title: "集采通知", sourceUrl: "https://www.gov.cn/policy/2" },
   ]);
 });
+
+test("HTML list extraction unwraps government-site record CDATA", () => {
+  const items = parseHtmlList(
+    `<ul></ul><record><![CDATA[<li><a href="/art/1">医保支付改革</a><span>2026-07-29</span></li>]]></record>`,
+    new URL("https://www.nhsa.gov.cn/col/col14/index.html"),
+    { itemSelector: "li", titleSelector: "a", linkSelector: "a", dateSelector: "span" },
+    10,
+  );
+  assert.deepEqual(items, [{
+    title: "医保支付改革",
+    sourceUrl: "https://www.nhsa.gov.cn/art/1",
+    excerpt: "",
+    publishedAt: "2026-07-29",
+  }]);
+});
