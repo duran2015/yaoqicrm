@@ -9,7 +9,7 @@ import { fmtDate, fmtWeekday } from "@/lib/utils";
 import { Badge, Button, Card, Empty, ErrorBox, Loading, Notice, PageHeader, TierBadge } from "@/components/ui";
 import { TourPlanEditor } from "@/components/tour-plan-editor";
 import { VisitFormDialog } from "@/components/visit-form";
-import { canEditPlan, canStartPlanItem } from "@/lib/tour-plan";
+import { businessDateKey, canEditPlan, canStartPlanItem } from "@/lib/tour-plan";
 
 const STATUS_TONES: Record<string, "slate" | "amber" | "emerald" | "red"> = {
   DRAFT: "slate",
@@ -216,10 +216,10 @@ export default function TourPlansPage() {
               <h2 className="mb-3 text-sm font-semibold text-slate-700">本周日历</h2>
               <div className="grid gap-2 md:grid-cols-7">
                 {weekDays.map((day) => {
-                  const dateKey = day.toISOString().slice(0, 10);
+                  const dateKey = businessDateKey(day);
                   const items = myPlans.flatMap((plan) =>
                     plan.items
-                      .filter((item) => item.planDate.slice(0, 10) === dateKey)
+                      .filter((item) => businessDateKey(item.planDate) === dateKey)
                       .map((item) => ({ plan, item }))
                   );
                   return (

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiGet, apiPatch, apiPost, ApiError } from "@/lib/api-client";
 import type { Hcp, ListResponse, TourPlan } from "@/lib/types";
 import { Button, Dialog, Field, Input, Select } from "@/components/ui";
+import { businessDateKey } from "@/lib/tour-plan";
 
 type DraftItem = { planDate: string; hcpId: string; note: string };
 
@@ -35,11 +36,11 @@ export function TourPlanEditor({
     setItems(
       plan?.items.length
         ? plan.items.map((item) => ({
-            planDate: item.planDate.slice(0, 10),
+            planDate: businessDateKey(item.planDate),
             hcpId: item.hcpId ?? item.hcp?.id ?? "",
             note: item.note ?? "",
           }))
-        : [{ planDate: weekStart.slice(0, 10), hcpId: "", note: "" }]
+        : [{ planDate: businessDateKey(weekStart), hcpId: "", note: "" }]
     );
     setError(null);
   }, [open, plan, weekStart]);
@@ -103,7 +104,7 @@ export function TourPlanEditor({
           ))}
         </div>
         <div className="flex justify-between">
-          <Button type="button" variant="outline" onClick={() => setItems((rows) => [...rows, { planDate: weekStart.slice(0, 10), hcpId: "", note: "" }])}>
+          <Button type="button" variant="outline" onClick={() => setItems((rows) => [...rows, { planDate: businessDateKey(weekStart), hcpId: "", note: "" }])}>
             添加计划项
           </Button>
           <div className="flex gap-2">
