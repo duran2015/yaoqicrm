@@ -11,14 +11,24 @@ export class ApiError extends Error {
 
 type Params = Record<string, string | number | undefined | null>;
 
+export function resolveApiPath(path: string, basePath: string): string {
+  if (/^https?:\/\//.test(path) || !basePath || path === basePath || path.startsWith(`${basePath}/`)) return path;
+  return path.startsWith("/") ? `${basePath}${path}` : path;
+}
+
+export function apiUrl(path: string): string {
+  return resolveApiPath(path, process.env.NEXT_PUBLIC_BASE_PATH ?? "");
+}
+
 function buildUrl(path: string, params?: Params): string {
-  if (!params) return path;
+  const resolvedPath = apiUrl(path);
+  if (!params) return resolvedPath;
   const sp = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== null && value !== "") sp.set(key, String(value));
   }
   const qs = sp.toString();
-  return qs ? `${path}?${qs}` : path;
+  return qs ? `${resolvedPath}?${qs}` : resolvedPath;
 }
 
 async function request<T>(method: string, path: string, body?: unknown, params?: Params): Promise<T> {

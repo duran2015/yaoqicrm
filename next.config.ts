@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   // 服务器上与既有站点共用 80 端口时,通过 NEXT_BASE_PATH=/pharma 挂载到子路径;
   // 本地开发不设置该变量,保持根路径。
   basePath: process.env.NEXT_BASE_PATH || "",
+  env: {
+    NEXT_PUBLIC_BASE_PATH: process.env.NEXT_BASE_PATH || "",
+  },
 };
 
 export default nextConfig;
