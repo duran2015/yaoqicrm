@@ -8,6 +8,7 @@ import { useUser } from "@/lib/context";
 import type { AccountMilestone, AccountPlan } from "@/lib/types";
 import { fmtDate } from "@/lib/utils";
 import { Badge, Button, Card, Dialog, Empty, ErrorBox, Field, Input, Loading, Notice, PageHeader, Select, TierBadge } from "@/components/ui";
+import { AccountPlanStrategyEditor } from "@/components/account-plan-strategy-editor";
 
 const ROLE_LABELS: Record<string, string> = { DECISION_MAKER: "决策者", INFLUENCER: "影响者", SUPPORTER: "支持者" };
 const ATTITUDE_LABELS: Record<string, string> = { ADVOCATE: "强力支持", SUPPORTIVE: "支持", NEUTRAL: "中立", OPPOSED: "反对" };
@@ -20,6 +21,7 @@ export default function AccountPlanDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [strategyEditorOpen, setStrategyEditorOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [ownerId, setOwnerId] = useState("");
   const [dueDate, setDueDate] = useState("2026-08-15");
@@ -77,7 +79,10 @@ export default function AccountPlanDetailPage() {
 
       <div className="space-y-5">
         <Card className="p-5">
-          <h2 className="mb-4 text-sm font-semibold text-slate-700">客户策略</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-700">客户策略</h2>
+            {plan.status === "ACTIVE" && <Button size="sm" variant="outline" onClick={() => setStrategyEditorOpen(true)}>编辑策略</Button>}
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div><div className="text-xs text-slate-400">业务目标</div><div className="mt-1 text-sm text-slate-700">{plan.businessGoal}</div></div>
             <div><div className="text-xs text-slate-400">现状判断</div><div className="mt-1 text-sm text-slate-700">{plan.situation ?? "暂无"}</div></div>
@@ -106,6 +111,12 @@ export default function AccountPlanDetailPage() {
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} title="新增里程碑">
         <div className="space-y-4"><Field label="标题" required><Input value={title} onChange={(event) => setTitle(event.target.value)} /></Field><Field label="负责人" required><Select className="w-full" value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} · {employee.role}</option>)}</Select></Field><Field label="截止日期" required><Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></Field><div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setDialogOpen(false)}>取消</Button><Button disabled={!title || !ownerId || !dueDate} onClick={createMilestone}>创建</Button></div></div>
       </Dialog>
+      <AccountPlanStrategyEditor
+        plan={plan}
+        open={strategyEditorOpen}
+        onClose={() => setStrategyEditorOpen(false)}
+        onSaved={() => { setNotice("客户策略已更新"); load(); }}
+      />
     </div>
   );
 }
