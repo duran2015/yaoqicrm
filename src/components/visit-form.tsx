@@ -18,10 +18,19 @@ interface VisitFormDialogProps {
   onClose: () => void;
   /** 从医生详情页打开时预选医生 */
   preselectedHcp?: { id: string; name: string } | null;
+  tourPlanItemId?: string | null;
+  plannedDate?: string | null;
   onSuccess?: (visit: Visit) => void;
 }
 
-export function VisitFormDialog({ open, onClose, preselectedHcp, onSuccess }: VisitFormDialogProps) {
+export function VisitFormDialog({
+  open,
+  onClose,
+  preselectedHcp,
+  tourPlanItemId,
+  plannedDate,
+  onSuccess,
+}: VisitFormDialogProps) {
   const { current, employees } = useUser();
 
   // 医生搜索 combobox
@@ -169,6 +178,9 @@ export function VisitFormDialog({ open, onClose, preselectedHcp, onSuccess }: Vi
     try {
       const visit = await apiPost<Visit>("/api/visits", {
         employeeId: current.id,
+        tourPlanItemId: tourPlanItemId || undefined,
+        visitDate: plannedDate || undefined,
+        status: "SUBMITTED",
         hcpId: selectedHcp.id,
         hcoId: selectedHcp.hco?.id ?? undefined,
         type,

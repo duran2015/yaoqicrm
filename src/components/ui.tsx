@@ -290,8 +290,13 @@ export function Loading({ text = "加载中…" }: { text?: string }) {
   );
 }
 
-export function Empty({ text = "暂无数据" }: { text?: string }) {
-  return <div className="py-12 text-center text-sm text-slate-400">{text}</div>;
+export function Empty({ text = "暂无数据", action }: { text?: string; action?: React.ReactNode }) {
+  return (
+    <div className="py-12 text-center text-sm text-slate-400">
+      <div>{text}</div>
+      {action && <div className="mt-3">{action}</div>}
+    </div>
+  );
 }
 
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {

@@ -76,6 +76,8 @@ export async function POST(req: NextRequest) {
 
   const visitDate = body.visitDate ? parseDate(String(body.visitDate)) : new Date();
   if (!visitDate) return err("visitDate 不是合法日期");
+  const status = body.status ? String(body.status) : "SUBMITTED";
+  if (!["DRAFT", "SUBMITTED"].includes(status)) return err("status 必须为 DRAFT | SUBMITTED");
 
   // 结构化拜访目的(数组 → 逗号分隔)
   let purposes: string | null = null;
@@ -165,30 +167,60 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const visit = await prisma.visit.create({
-    data: {
-      employeeId,
-      hcpId: body.hcpId ? String(body.hcpId) : null,
-      hcoId: body.hcoId ? String(body.hcoId) : null,
-      visitDate,
-      type,
-      purpose: body.purpose ? String(body.purpose) : null,
-      purposes,
-      outcome: body.outcome ? String(body.outcome) : null,
-      duration: body.duration != null ? Number(body.duration) : null,
-      notes: body.notes ? String(body.notes) : null,
-      summary: body.summary ? String(body.summary) : null,
-      nextStep: body.nextStep ? String(body.nextStep) : null,
-      aiSummary: body.aiSummary ? String(body.aiSummary) : null,
-      aiSentiment: body.aiSentiment ? String(body.aiSentiment) : null,
-      source,
-      receiverId,
-      jointWithId: body.jointWithId ? String(body.jointWithId) : null,
-      products: { create: productCreates },
-      samples: { create: sampleCreates },
-      checkins: { create: checkinCreates },
-    },
-    include: visitInclude,
+  const tourPlanItemId = body.tourPlanItemId ? String(body.tourPlanItemId) : null;
+  const visit = await prisma.$transaction(async (tx) => {
+    if (tourPlanItemId) {
+      const item = await tx.tourPlanItem.findUnique({
+        where: { id: tourPlanItemId },
+        include: { tourPlan: true },
+      });
+      if (!item) throw new Error("PLAN_ITEM_NOT_FOUND");
+      if (item.tourPlan.employeeId !== employeeId || item.tourPlan.status !== "APPROVED" || item.status !== "PLANNED" || item.visitId) {
+        throw new Error("PLAN_ITEM_CONFLICT");
+      }
+    }
+    const created = await tx.visit.create({
+      data: {
+        employeeId,
+        hcpId: body.hcpId ? String(body.hcpId) : null,
+        hcoId: body.hcoId ? String(body.hcoId) : null,
+        visitDate,
+        type,
+        status,
+        purpose: body.purpose ? String(body.purpose) : null,
+        purposes,
+        outcome: body.outcome ? String(body.outcome) : null,
+        duration: body.duration != null ? Number(body.duration) : null,
+        notes: body.notes ? String(body.notes) : null,
+        summary: body.summary ? String(body.summary) : null,
+        nextStep: body.nextStep ? String(body.nextStep) : null,
+        aiSummary: body.aiSummary ? String(body.aiSummary) : null,
+        aiSentiment: body.aiSentiment ? String(body.aiSentiment) : null,
+        source,
+        receiverId,
+        jointWithId: body.jointWithId ? String(body.jointWithId) : null,
+        products: { create: productCreates },
+        samples: { create: sampleCreates },
+        checkins: { create: checkinCreates },
+      },
+      include: visitInclude,
+    });
+    if (tourPlanItemId) {
+      await tx.tourPlanItem.update({
+        where: { id: tourPlanItemId },
+        data: {
+          visitId: created.id,
+          status: status === "SUBMITTED" ? "COMPLETED" : "PLANNED",
+        },
+      });
+    }
+    return created;
+  }).catch((error: unknown) => {
+    if (error instanceof Error && error.message === "PLAN_ITEM_NOT_FOUND") return null;
+    if (error instanceof Error && error.message === "PLAN_ITEM_CONFLICT") return false;
+    throw error;
   });
+  if (visit === null) return err("计划项不存在", 404);
+  if (visit === false) return err("该计划项当前不能创建拜访", 409);
   return NextResponse.json(visit, { status: 201 });
 }

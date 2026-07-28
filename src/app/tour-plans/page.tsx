@@ -7,6 +7,9 @@ import { useUser } from "@/lib/context";
 import type { ListResponse, TourPlan } from "@/lib/types";
 import { fmtDate, fmtWeekday } from "@/lib/utils";
 import { Badge, Button, Card, Empty, ErrorBox, Loading, Notice, PageHeader, TierBadge } from "@/components/ui";
+import { TourPlanEditor } from "@/components/tour-plan-editor";
+import { VisitFormDialog } from "@/components/visit-form";
+import { canEditPlan, canStartPlanItem } from "@/lib/tour-plan";
 
 const STATUS_TONES: Record<string, "slate" | "amber" | "emerald" | "red"> = {
   DRAFT: "slate",
@@ -18,9 +21,11 @@ const STATUS_TONES: Record<string, "slate" | "amber" | "emerald" | "red"> = {
 function PlanCard({
   plan,
   actions,
+  onStartVisit,
 }: {
   plan: TourPlan;
   actions?: React.ReactNode;
+  onStartVisit?: (item: TourPlan["items"][number]) => void;
 }) {
   return (
     <Card className="p-5">
@@ -58,7 +63,15 @@ function PlanCard({
                 )}
                 {item.hcp?.tier && <TierBadge tier={item.hcp.tier} />}
               </div>
-              {item.note && <span className="text-xs text-slate-400">{item.note}</span>}
+              <div className="flex items-center gap-2">
+                <Badge tone={item.status === "COMPLETED" ? "emerald" : item.status === "CANCELLED" ? "red" : "slate"}>
+                  {item.status === "COMPLETED" ? "已完成" : item.status === "CANCELLED" ? "已取消" : "待执行"}
+                </Badge>
+                {item.note && <span className="text-xs text-slate-400">{item.note}</span>}
+                {onStartVisit && canStartPlanItem(plan.status, item.status, item.visitId) && (
+                  <Button size="sm" onClick={() => onStartVisit(item)}>记录拜访</Button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -75,8 +88,16 @@ export default function TourPlansPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [acting, setActing] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<TourPlan | null>(null);
+  const [visitItem, setVisitItem] = useState<TourPlan["items"][number] | null>(null);
 
   const manager = isManagerRole(current?.role);
+  const weekDays = Array.from({ length: 7 }, (_, offset) => {
+    const date = new Date(WEEK_START_ISO);
+    date.setDate(date.getDate() + offset);
+    return date;
+  });
 
   const load = useCallback(() => {
     if (!current) return;
@@ -147,7 +168,15 @@ export default function TourPlansPage() {
 
   return (
     <div>
-      <PageHeader title="周计划" desc={`本周:${WEEK_START_LABEL} 起(周一)`} />
+      <PageHeader
+        title="周计划"
+        desc={`本周:${WEEK_START_LABEL} 起(周一)`}
+        extra={
+          !myPlans.length ? (
+            <Button onClick={() => { setEditingPlan(null); setEditorOpen(true); }}>创建周计划</Button>
+          ) : undefined
+        }
+      />
 
       {notice && <Notice kind={notice.kind} text={notice.text} onClose={() => setNotice(null)} />}
       {error && <ErrorBox message={error} onRetry={load} />}
@@ -159,7 +188,7 @@ export default function TourPlansPage() {
             <h2 className="mb-3 text-sm font-semibold text-slate-700">我的本周计划</h2>
             {myPlans.length === 0 ? (
               <Card>
-                <Empty text="本周暂无计划" />
+                <Empty text="本周暂无计划" action={<Button onClick={() => setEditorOpen(true)}>创建周计划</Button>} />
               </Card>
             ) : (
               <div className="space-y-4">
@@ -168,17 +197,56 @@ export default function TourPlansPage() {
                     key={plan.id}
                     plan={plan}
                     actions={
-                      plan.status === "DRAFT" || plan.status === "REJECTED" ? (
-                        <Button size="sm" disabled={acting} onClick={() => submitPlan(plan)}>
-                          提交审批
-                        </Button>
+                      canEditPlan(plan.status) ? (
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => { setEditingPlan(plan); setEditorOpen(true); }}>编辑</Button>
+                          <Button size="sm" disabled={acting} onClick={() => submitPlan(plan)}>提交审批</Button>
+                        </div>
                       ) : undefined
                     }
+                    onStartVisit={setVisitItem}
                   />
                 ))}
               </div>
             )}
           </section>
+
+          {myPlans.length > 0 && (
+            <section>
+              <h2 className="mb-3 text-sm font-semibold text-slate-700">本周日历</h2>
+              <div className="grid gap-2 md:grid-cols-7">
+                {weekDays.map((day) => {
+                  const dateKey = day.toISOString().slice(0, 10);
+                  const items = myPlans.flatMap((plan) =>
+                    plan.items
+                      .filter((item) => item.planDate.slice(0, 10) === dateKey)
+                      .map((item) => ({ plan, item }))
+                  );
+                  return (
+                    <Card key={dateKey} className="min-h-32 p-3">
+                      <div className="mb-2 text-xs font-medium text-slate-500">
+                        {fmtDate(day.toISOString())} {fmtWeekday(day.toISOString())}
+                      </div>
+                      <div className="space-y-2">
+                        {items.map(({ plan, item }) => (
+                          <div key={item.id} className="rounded-md bg-slate-50 p-2 text-xs">
+                            <div className="font-medium text-slate-700">{item.hcp?.name ?? item.hcoName ?? "未指定对象"}</div>
+                            <div className="mt-1 flex items-center justify-between">
+                              <span className="text-slate-400">{item.status === "COMPLETED" ? "已完成" : item.status === "CANCELLED" ? "已取消" : "待执行"}</span>
+                              {canStartPlanItem(plan.status, item.status, item.visitId) && (
+                                <button className="text-emerald-700 hover:underline" onClick={() => setVisitItem(item)}>记录拜访</button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {!items.length && <div className="py-4 text-center text-xs text-slate-300">无安排</div>}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {manager && (
             <section>
@@ -211,6 +279,22 @@ export default function TourPlansPage() {
           )}
         </div>
       )}
+      <TourPlanEditor
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        employeeId={current.id}
+        weekStart={WEEK_START_ISO}
+        plan={editingPlan}
+        onSaved={load}
+      />
+      <VisitFormDialog
+        open={Boolean(visitItem)}
+        onClose={() => setVisitItem(null)}
+        preselectedHcp={visitItem?.hcp ? { id: visitItem.hcp.id, name: visitItem.hcp.name } : null}
+        tourPlanItemId={visitItem?.id}
+        plannedDate={visitItem?.planDate}
+        onSuccess={() => load()}
+      />
     </div>
   );
 }
