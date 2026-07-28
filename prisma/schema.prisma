@@ -31,6 +31,9 @@ model Employee {
   targets            Target[]
   assignments        CustomerAssignment[]
   kaHcos             Hco[]                @relation("KaOwner")
+  followUpTasks      FollowUpTask[]       @relation("TaskAssignee")
+  managedCoachings   CoachingAction[]     @relation("CoachingManager")
+  assignedCoachings  CoachingAction[]     @relation("CoachingEmployee")
 }
 
 // 五级部门树(行政组织,独立于 Territory 辖区):
@@ -120,6 +123,7 @@ model Hco {
   examResults      HcoExamResult[]
   assignments      CustomerAssignment[]
   tierHistories    CustomerTierHistory[]
+  followUpTasks    FollowUpTask[]
 }
 
 // 医生 HCP
@@ -174,6 +178,7 @@ model Hcp {
   bankAccounts       HcpBankAccount[]
   assignments        CustomerAssignment[]
   tierHistories      CustomerTierHistory[]
+  followUpTasks      FollowUpTask[]
 }
 
 // 产品主数据:品牌→分子→治疗领域
@@ -193,39 +198,44 @@ model Product {
 
 // 拜访记录 DCR(最核心事实表)
 model Visit {
-  id             String              @id @default(cuid())
-  employeeId     String
-  employee       Employee            @relation(fields: [employeeId], references: [id])
-  hcpId          String?
-  hcp            Hcp?                @relation(fields: [hcpId], references: [id])
-  hcoId          String?
-  hco            Hco?                @relation(fields: [hcoId], references: [id])
-  visitDate      DateTime
-  type           String // FACE_TO_FACE | PHONE | CONFERENCE | JOINT(协同拜访)
-  purpose        String? // 拜访目的(旧自由文本字段,向后兼容保留)
-  purposes       String? // 结构化拜访目的,逗号分隔多选:产品信息传递|临床信息沟通|市场现状调研|学术会议沟通|其他
-  outcome        String? // 结果,如 "同意试用" | "需进一步跟进"
-  duration       Int? // 分钟
-  notes          String? // 原始记录(语音速记/文字)
-  summary        String? // 人工拜访总结(与 aiSummary 并存,真实导出数据为两个独立字段)
-  nextStep       String? // 下一步计划
-  aiSummary      String? // AI 富化:摘要(预留给 AI 工具写)
-  aiSentiment    String? // AI 富化:情感倾向 POSITIVE|NEUTRAL|NEGATIVE
-  source         String              @default("MANUAL") // 数据来源:MANUAL | AI | IMPORT
-  receiverId     String? // 报告接收人(上级),默认=填写人的直属上级
-  receiver       Employee?           @relation("VisitReceiver", fields: [receiverId], references: [id])
+  id              String              @id @default(cuid())
+  employeeId      String
+  employee        Employee            @relation(fields: [employeeId], references: [id])
+  hcpId           String?
+  hcp             Hcp?                @relation(fields: [hcpId], references: [id])
+  hcoId           String?
+  hco             Hco?                @relation(fields: [hcoId], references: [id])
+  visitDate       DateTime
+  type            String // FACE_TO_FACE | PHONE | CONFERENCE | JOINT(协同拜访)
+  purpose         String? // 拜访目的(旧自由文本字段,向后兼容保留)
+  purposes        String? // 结构化拜访目的,逗号分隔多选:产品信息传递|临床信息沟通|市场现状调研|学术会议沟通|其他
+  outcome         String? // 结果,如 "同意试用" | "需进一步跟进"
+  duration        Int? // 分钟
+  notes           String? // 原始记录(语音速记/文字)
+  summary         String? // 人工拜访总结(与 aiSummary 并存,真实导出数据为两个独立字段)
+  nextStep        String? // 下一步计划
+  aiSummary       String? // AI 富化:摘要(预留给 AI 工具写)
+  aiSentiment     String? // AI 富化:情感倾向 POSITIVE|NEUTRAL|NEGATIVE
+  source          String              @default("MANUAL") // 数据来源:MANUAL | AI | IMPORT
+  status          String              @default("SUBMITTED") // DRAFT | SUBMITTED
+  receiverId      String? // 报告接收人(上级),默认=填写人的直属上级
+  receiver        Employee?           @relation("VisitReceiver", fields: [receiverId], references: [id])
   // 有效性评定(经理对接收到的拜访做有效/无效反馈)
-  validityStatus String              @default("PENDING") // PENDING=未反馈 | VALID=有效 | INVALID=无效
-  evaluatedById  String?
-  evaluatedBy    Employee?           @relation("VisitEvaluator", fields: [evaluatedById], references: [id])
-  evaluatedAt    DateTime?
-  invalidReason  String? // 无效原因:重复 | 内容过短 | 签到地点不对 | 结果未体现 …
-  jointWithId    String? // 协同拜访的同事
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  products       VisitProduct[]
-  samples        SampleTransaction[]
-  checkins       CheckIn[]
+  validityStatus  String              @default("PENDING") // PENDING=未反馈 | VALID=有效 | INVALID=无效
+  evaluatedById   String?
+  evaluatedBy     Employee?           @relation("VisitEvaluator", fields: [evaluatedById], references: [id])
+  evaluatedAt     DateTime?
+  invalidReason   String? // 无效原因:重复 | 内容过短 | 签到地点不对 | 结果未体现 …
+  jointWithId     String? // 协同拜访的同事
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  products        VisitProduct[]
+  samples         SampleTransaction[]
+  checkins        CheckIn[]
+  tourPlanItem    TourPlanItem?       @relation("PlanItemVisit")
+  sourceTasks     FollowUpTask[]      @relation("TaskSourceVisit")
+  followUpTasks   FollowUpTask[]      @relation("TaskFollowUpVisit")
+  coachingActions CoachingAction[]
 }
 
 // 拜访签到(真实导出数据每条拜访绑定一条签到)
@@ -273,6 +283,9 @@ model TourPlanItem {
   hcp        Hcp?     @relation(fields: [hcpId], references: [id])
   hcoName    String? // 或自由文本机构
   note       String?
+  status     String   @default("PLANNED") // PLANNED | COMPLETED | CANCELLED
+  visitId    String?  @unique
+  visit      Visit?   @relation("PlanItemVisit", fields: [visitId], references: [id])
 }
 
 // 样品批次
@@ -288,37 +301,92 @@ model SampleLot {
 
 // 样品发放事务(代表库存由发放/领用事务推导)
 model SampleTransaction {
-  id         String    @id @default(cuid())
-  lotId      String
-  lot        SampleLot @relation(fields: [lotId], references: [id])
-  employeeId String
-  employee   Employee  @relation(fields: [employeeId], references: [id])
-  hcpId      String?
-  hcp        Hcp?      @relation(fields: [hcpId], references: [id])
-  visitId    String?
-  visit      Visit?    @relation(fields: [visitId], references: [id])
-  quantity   Int // 正数=数量,方向由 type 区分
-  type       String // RECEIVE(代表领用) | DISTRIBUTE(发放给医生)
-  transDate  DateTime  @default(now())
+  id             String    @id @default(cuid())
+  lotId          String
+  lot            SampleLot @relation(fields: [lotId], references: [id])
+  employeeId     String
+  employee       Employee  @relation(fields: [employeeId], references: [id])
+  hcpId          String?
+  hcp            Hcp?      @relation(fields: [hcpId], references: [id])
+  visitId        String?
+  visit          Visit?    @relation(fields: [visitId], references: [id])
+  quantity       Int // 正数=数量,方向由 type 区分
+  type           String // RECEIVE | DISTRIBUTE | RETURN | ADJUST
+  transDate      DateTime  @default(now())
+  reason         String?
+  confirmedByHcp Boolean   @default(false)
+  createdAt      DateTime  @default(now())
 }
 
 // 医学会议
 model MedEvent {
-  id        String            @id @default(cuid())
-  name      String
-  type      String // 科室会 | 城市会 | 学术研讨会 | 卫星会
-  eventDate DateTime
-  location  String?
-  budget    Float?
-  attendees EventAttendance[]
+  id            String            @id @default(cuid())
+  name          String
+  type          String // 科室会 | 城市会 | 学术研讨会 | 卫星会
+  eventDate     DateTime
+  location      String?
+  budget        Float?
+  attendees     EventAttendance[]
+  status        String            @default("DRAFT") // DRAFT | OPEN | COMPLETED | CANCELLED
+  followUpTasks FollowUpTask[]
 }
 
 model EventAttendance {
-  id      String   @id @default(cuid())
-  eventId String
-  event   MedEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  hcpId   String
-  hcp     Hcp      @relation(fields: [hcpId], references: [id])
+  id          String    @id @default(cuid())
+  eventId     String
+  event       MedEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  hcpId       String
+  hcp         Hcp       @relation(fields: [hcpId], references: [id])
+  status      String    @default("INVITED") // INVITED | CHECKED_IN | ABSENT
+  checkedInAt DateTime?
+}
+
+model FollowUpTask {
+  id              String    @id @default(cuid())
+  title           String
+  description     String?
+  status          String    @default("OPEN") // OPEN | DONE | CANCELLED
+  priority        String    @default("NORMAL") // NORMAL | HIGH
+  dueDate         DateTime?
+  assigneeId      String
+  assignee        Employee  @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  hcpId           String?
+  hcp             Hcp?      @relation(fields: [hcpId], references: [id])
+  hcoId           String?
+  hco             Hco?      @relation(fields: [hcoId], references: [id])
+  sourceVisitId   String?
+  sourceVisit     Visit?    @relation("TaskSourceVisit", fields: [sourceVisitId], references: [id])
+  sourceEventId   String?
+  sourceEvent     MedEvent? @relation(fields: [sourceEventId], references: [id])
+  followUpVisitId String?   @unique
+  followUpVisit   Visit?    @relation("TaskFollowUpVisit", fields: [followUpVisitId], references: [id])
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([assigneeId, status, dueDate])
+  @@index([hcpId, status])
+  @@index([sourceEventId, status])
+}
+
+model CoachingAction {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  status        String    @default("OPEN") // OPEN | DONE | CANCELLED
+  managerId     String
+  manager       Employee  @relation("CoachingManager", fields: [managerId], references: [id])
+  employeeId    String
+  employee      Employee  @relation("CoachingEmployee", fields: [employeeId], references: [id])
+  sourceVisitId String?
+  sourceVisit   Visit?    @relation(fields: [sourceVisitId], references: [id])
+  dueDate       DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([managerId, status])
+  @@index([employeeId, status, dueDate])
 }
 
 // 销售指标

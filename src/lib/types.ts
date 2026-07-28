@@ -101,6 +101,7 @@ export interface CheckIn {
 
 export interface Visit {
   id: string;
+  status?: string;
   visitDate: string;
   type: string;
   purpose?: string | null;
@@ -145,6 +146,8 @@ export interface TourPlanItem {
   hcp?: { id: string; name: string; title?: string | null; tier?: string; hco?: { id: string; name: string } | null } | null;
   hcoName?: string | null;
   note?: string | null;
+  status: string;
+  visitId?: string | null;
 }
 
 export interface TourPlan {
@@ -179,8 +182,42 @@ export interface MedEvent {
   eventDate: string;
   location?: string | null;
   budget?: number | null;
+  status: string;
   _count?: { attendees: number };
-  attendees?: { id: string; hcp: { id: string; name: string; title?: string | null; tier?: string; hco?: { id: string; name: string } | null } }[];
+  attendees?: {
+    id: string;
+    status: string;
+    checkedInAt?: string | null;
+    hcp: { id: string; name: string; title?: string | null; tier?: string; hco?: { id: string; name: string } | null };
+  }[];
+}
+
+export interface FollowUpTask {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: string;
+  priority: string;
+  dueDate?: string | null;
+  completedAt?: string | null;
+  assignee: { id: string; name: string; role: string };
+  hcp?: { id: string; name: string; title?: string | null; hco?: { id: string; name: string } | null } | null;
+  hco?: { id: string; name: string } | null;
+  sourceVisitId?: string | null;
+  sourceEventId?: string | null;
+  followUpVisitId?: string | null;
+}
+
+export interface CoachingAction {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: string;
+  dueDate?: string | null;
+  completedAt?: string | null;
+  manager: { id: string; name: string };
+  employee: { id: string; name: string; role: string };
+  sourceVisitId?: string | null;
 }
 
 export interface DashboardData {
