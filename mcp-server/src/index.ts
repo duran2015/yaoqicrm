@@ -29,6 +29,18 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import {
+  AuthError,
+  mapClaimsToEmployee,
+  verifyWorkBuddyJwt,
+  type SessionActor,
+} from "./auth.js";
+import {
+  assertEmployeeScope,
+  assertSessionRequestActor,
+  bearerToken,
+  type SessionContext,
+} from "./session-auth.js";
 
 // ---------------------------------------------------------------------------
 // 配置与运行时状态
@@ -42,15 +54,8 @@ function argvValue(flag: string): string | undefined {
   return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : undefined;
 }
 
-interface CurrentEmployee {
-  id: string;
-  name: string;
-  role: string;
-  division?: string;
-}
-
-/** 当前操作身份(内存状态,可由 set_current_employee 运行时切换) */
-let currentEmployee: CurrentEmployee | null = null;
+/** 当前操作身份仅用于 stdio 本地开发；HTTP 身份固定在各 session。 */
+let currentEmployee: SessionActor | null = null;
 const envEmployeeId = argvValue("--employee-id") ?? process.env.CRM_EMPLOYEE_ID;
 const envEmployeeName = argvValue("--employee-name");
 
@@ -129,15 +134,13 @@ async function callTool(fn: () => Promise<unknown>) {
 }
 
 /** 需要"当前员工"时的兜底:未设置则给出可操作的中文提示 */
-function requireEmployee(explicitId?: string): string {
-  const id = explicitId ?? currentEmployee?.id;
-  if (!id) {
-    throw new CrmError(
-      400,
-      "未指定 employeeId,且当前未设置操作身份。请先调用 set_current_employee,或用环境变量 CRM_EMPLOYEE_ID / 启动参数 --employee-id 指定默认员工。",
-    );
+function requireEmployee(context: SessionContext, explicitId?: string): string {
+  try {
+    return assertEmployeeScope(context, explicitId);
+  } catch (error) {
+    if (error instanceof AuthError) throw new CrmError(403, error.message);
+    throw error;
   }
-  return id;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +152,7 @@ interface EmployeeNode {
   name: string;
   role: string;
   division?: string;
+  departmentId?: string | null;
   territory?: { id: string; name: string; level: string } | null;
   subordinates?: EmployeeNode[];
 }
@@ -183,7 +187,7 @@ let toolCount = 0;
  * stdio 模式创建 1 份;HTTP(Streamable)模式每个 session 各创建 1 份
  * (一份 McpServer 只能连接一个 transport)。
  */
-function createMcpServer(): McpServer {
+function createMcpServer(context: SessionContext): McpServer {
   const server = new McpServer({
     name: "pharma-crm-mcp-server",
     version: "1.0.0",
@@ -222,7 +226,15 @@ tool(
   async ({ query, tier, hcoId, specialty, graded, employeeId, mine }) =>
     callTool(() =>
       crmFetch("/api/hcp", {
-        query: { query, tier, hcoId, specialty, graded, mine, employeeId: employeeId ?? currentEmployee?.id },
+        query: {
+          query,
+          tier,
+          hcoId,
+          specialty,
+          graded,
+          mine,
+          employeeId: employeeId ? requireEmployee(context, employeeId) : context.actor?.employeeId,
+        },
       }),
     ),
 );
@@ -298,7 +310,7 @@ tool(
   },
   async ({ products, samples, checkin, ...rest }) =>
     callTool(async () => {
-      const body: Record<string, unknown> = { ...rest, employeeId: requireEmployee(rest.employeeId) };
+      const body: Record<string, unknown> = { ...rest, employeeId: requireEmployee(context, rest.employeeId) };
       if (products?.length) body.products = products;
       if (samples?.length) body.samples = samples;
       if (checkin) body.checkins = [checkin];
@@ -335,7 +347,7 @@ tool(
   async ({ employeeId, hcpId, from, to, type, validityStatus, source }) =>
     callTool(() =>
       crmFetch("/api/visits", {
-        query: { employeeId: requireEmployee(employeeId), hcpId, from, to, type, validityStatus, source },
+        query: { employeeId: requireEmployee(context, employeeId), hcpId, from, to, type, validityStatus, source },
       }),
     ),
 );
@@ -385,7 +397,7 @@ tool(
   async ({ employeeId, status, weekStart }) =>
     callTool(() =>
       crmFetch("/api/tour-plans", {
-        query: { employeeId: requireEmployee(employeeId), status, weekStart },
+        query: { employeeId: requireEmployee(context, employeeId), status, weekStart },
       }),
     ),
 );
@@ -420,7 +432,7 @@ tool(
   },
   async ({ employeeId }) =>
     callTool(() =>
-      crmFetch("/api/samples/inventory", { query: { employeeId: requireEmployee(employeeId) } }),
+      crmFetch("/api/samples/inventory", { query: { employeeId: requireEmployee(context, employeeId) } }),
     ),
 );
 
@@ -442,7 +454,7 @@ tool(
   async ({ employeeId, asOf }) =>
     callTool(() =>
       crmFetch("/api/analytics/dashboard", {
-        query: { employeeId: requireEmployee(employeeId), asOf: asOf ?? DEMO_AS_OF },
+        query: { employeeId: requireEmployee(context, employeeId), asOf: asOf ?? DEMO_AS_OF },
       }),
     ),
 );
@@ -462,7 +474,7 @@ tool(
   async ({ employeeId, asOf }) =>
     callTool(() =>
       crmFetch("/api/analytics/territory", {
-        query: { employeeId: requireEmployee(employeeId), asOf: asOf ?? DEMO_AS_OF },
+        query: { employeeId: requireEmployee(context, employeeId), asOf: asOf ?? DEMO_AS_OF },
       }),
     ),
 );
@@ -496,6 +508,7 @@ tool(
 );
 
 // 13. set_current_employee ----------------------------------------------------
+if (context.mode === "stdio") {
 tool(
   "set_current_employee",
   {
@@ -512,13 +525,21 @@ tool(
       if (!emp) {
         throw new CrmError(404, `未找到员工:「${nameOrId}」。可用 list_employees 查看全部员工。`);
       }
-      currentEmployee = { id: emp.id, name: emp.name, role: emp.role, division: emp.division };
+      context.actor = {
+        userId: `stdio:${emp.id}`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        role: emp.role,
+        division: emp.division,
+        departmentId: emp.departmentId ?? undefined,
+      };
       return {
         message: `当前操作身份已切换为:${emp.name}(${emp.role}${emp.division ? ", " + emp.division : ""})`,
-        currentEmployee,
+        currentEmployee: context.actor,
       };
     }),
 );
+}
 
 // 14. evaluate_visit ----------------------------------------------------------
 tool(
@@ -538,7 +559,7 @@ tool(
     callTool(() =>
       crmFetch(`/api/visits/${encodeURIComponent(visitId)}/evaluate`, {
         method: "POST",
-        body: { action, reason, evaluatorId: requireEmployee(evaluatorId) },
+        body: { action, reason, evaluatorId: requireEmployee(context, evaluatorId) },
       }),
     ),
 );
@@ -556,7 +577,7 @@ tool(
   },
   async ({ evaluatorId }) =>
     callTool(() =>
-      crmFetch("/api/evaluations/pending", { query: { evaluatorId: requireEmployee(evaluatorId) } }),
+      crmFetch("/api/evaluations/pending", { query: { evaluatorId: requireEmployee(context, evaluatorId) } }),
     ),
 );
 
@@ -589,7 +610,7 @@ tool(
   },
   async ({ visitId, locationName, latitude, longitude, employeeId }) =>
     callTool(async () => {
-      const empId = requireEmployee(employeeId);
+      const empId = requireEmployee(context, employeeId);
       return crmFetch(`/api/visits/${encodeURIComponent(visitId)}/checkins`, {
         method: "POST",
         body: { employeeId: empId, locationName, latitude, longitude },
@@ -611,7 +632,12 @@ tool(
   },
   async ({ type, employeeId }) =>
     callTool(() =>
-      crmFetch("/api/customers/stats", { query: { type, employeeId: employeeId ?? currentEmployee?.id } }),
+      crmFetch("/api/customers/stats", {
+        query: {
+          type,
+          employeeId: employeeId ? requireEmployee(context, employeeId) : context.actor?.employeeId,
+        },
+      }),
     ),
 );
 
@@ -642,7 +668,7 @@ tool(
         body: {
           type, payload, pool, submit: submit ?? false,
           targetHcpId, targetHcoId,
-          applicantId: requireEmployee(),
+          applicantId: requireEmployee(context),
         },
       }),
     ),
@@ -689,7 +715,7 @@ tool(
     callTool(() =>
       crmFetch(`/api/applications/${encodeURIComponent(applicationId)}/review`, {
         method: "POST",
-        body: { action, reason, reviewerId: requireEmployee(reviewerId) },
+        body: { action, reason, reviewerId: requireEmployee(context, reviewerId) },
       }),
     ),
 );
@@ -749,7 +775,7 @@ tool(
         : `/api/hco/${encodeURIComponent(hcoId!)}/tier`;
       return crmFetch(path, {
         method: "POST",
-        body: { toTier, reason, changedById: requireEmployee(changedById) },
+        body: { toTier, reason, changedById: requireEmployee(context, changedById) },
       });
     }),
 );
@@ -791,7 +817,7 @@ tool(
         empId = emp.id;
       }
       return crmFetch("/api/analytics/employee-visits", {
-        query: { employeeId: requireEmployee(empId), from, to },
+        query: { employeeId: requireEmployee(context, empId), from, to },
       });
     }),
 );
@@ -809,7 +835,14 @@ async function resolveInitialEmployee() {
     if (envEmployeeId || envEmployeeName) {
       const emp = await findEmployee(envEmployeeId ?? envEmployeeName!);
       if (emp) {
-        currentEmployee = { id: emp.id, name: emp.name, role: emp.role, division: emp.division };
+        currentEmployee = {
+          userId: `stdio:${emp.id}`,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          role: emp.role,
+          division: emp.division,
+          departmentId: emp.departmentId ?? undefined,
+        };
         console.error(`[mcp-server] 当前操作身份:${emp.name}(${emp.role}, id=${emp.id})`);
         return;
       }
@@ -820,7 +853,14 @@ async function resolveInitialEmployee() {
     const res = await crmFetch<{ data: EmployeeNode[] }>("/api/employees");
     const mr = flattenEmployees(res.data ?? []).find((e) => e.role === "MR");
     if (mr) {
-      currentEmployee = { id: mr.id, name: mr.name, role: mr.role, division: mr.division };
+      currentEmployee = {
+        userId: `stdio:${mr.id}`,
+        employeeId: mr.id,
+        employeeName: mr.name,
+        role: mr.role,
+        division: mr.division,
+        departmentId: mr.departmentId ?? undefined,
+      };
       console.error(`[mcp-server] 未指定员工,默认取第一位 MR:${mr.name}(id=${mr.id}),可用 set_current_employee 切换`);
     }
   } catch (e) {
@@ -837,7 +877,9 @@ async function resolveInitialEmployee() {
 
 const MCP_PORT = Number(process.env.MCP_PORT ?? 5620);
 const MCP_HOST = process.env.MCP_HOST ?? "0.0.0.0";
-const MCP_AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
+const WORKBUDDY_JWT_SECRET = process.env.WORKBUDDY_JWT_SECRET;
+const WORKBUDDY_JWT_ISSUER = process.env.WORKBUDDY_JWT_ISSUER ?? "workbuddy-local";
+const WORKBUDDY_JWT_AUDIENCE = process.env.WORKBUDDY_JWT_AUDIENCE ?? "pharma-crm-mcp";
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -853,22 +895,37 @@ function sendJson(res: ServerResponse, status: number, data: unknown) {
   res.end(JSON.stringify(data));
 }
 
-/** Bearer 鉴权:设置了 MCP_AUTH_TOKEN 则所有 HTTP 请求(含 /health)都必须携带 */
-function checkAuth(req: IncomingMessage, res: ServerResponse): boolean {
-  if (!MCP_AUTH_TOKEN) return true;
-  if (req.headers.authorization === `Bearer ${MCP_AUTH_TOKEN}`) return true;
-  sendJson(res, 401, { error: "Unauthorized:需要请求头 Authorization: Bearer <MCP_AUTH_TOKEN>" });
-  return false;
+async function authenticateHttpRequest(req: IncomingMessage): Promise<SessionActor> {
+  if (!WORKBUDDY_JWT_SECRET) {
+    throw new AuthError("INVALID_CLAIMS", "MCP HTTP 模式缺少 WORKBUDDY_JWT_SECRET");
+  }
+  const claims = verifyWorkBuddyJwt(bearerToken(req.headers.authorization), {
+    secret: WORKBUDDY_JWT_SECRET,
+    issuer: WORKBUDDY_JWT_ISSUER,
+    audience: WORKBUDDY_JWT_AUDIENCE,
+  });
+  const employee = await crmFetch<EmployeeNode>(
+    `/api/employees/${encodeURIComponent(claims.employeeId)}`,
+  ).catch((error: unknown) => {
+    if (error instanceof CrmError && error.status === 404) return null;
+    throw error;
+  });
+  return mapClaimsToEmployee(claims, employee);
 }
 
 async function startHttpServer() {
-  // sessionId → transport(SDK 官方有状态模式:initialize 创建,按 sessionId 路由,关闭时清理)
-  const transports = new Map<string, StreamableHTTPServerTransport>();
+  if (!WORKBUDDY_JWT_SECRET) {
+    throw new Error("HTTP 模式必须设置 WORKBUDDY_JWT_SECRET");
+  }
+  // sessionId → transport + immutable actor
+  const sessions = new Map<
+    string,
+    { transport: StreamableHTTPServerTransport; context: SessionContext }
+  >();
 
   const httpServer = createHttpServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
-      if (!checkAuth(req, res)) return;
 
       if (url.pathname === "/health" && req.method === "GET") {
         sendJson(res, 200, { ok: true, tools: toolCount });
@@ -879,6 +936,7 @@ async function startHttpServer() {
         return;
       }
 
+      const requestActor = await authenticateHttpRequest(req);
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
       if (req.method === "POST") {
@@ -891,24 +949,27 @@ async function startHttpServer() {
           return;
         }
         // 已有 session:按 sessionId 路由
-        if (sessionId && transports.has(sessionId)) {
-          await transports.get(sessionId)!.handleRequest(req, res, body);
+        if (sessionId && sessions.has(sessionId)) {
+          const session = sessions.get(sessionId)!;
+          assertSessionRequestActor(session.context, requestActor);
+          await session.transport.handleRequest(req, res, body);
           return;
         }
         // 新 session:仅 initialize 请求可建立
         if (!sessionId && isInitializeRequest(body)) {
+          const context: SessionContext = { mode: "jwt", actor: requestActor };
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             // POST 直接返回 JSON 响应(不包 SSE),便于简单客户端集成;GET 仍支持 SSE 流
             enableJsonResponse: true,
             onsessioninitialized: (sid) => {
-              transports.set(sid, transport);
+              sessions.set(sid, { transport, context });
             },
           });
           transport.onclose = () => {
-            if (transport.sessionId) transports.delete(transport.sessionId);
+            if (transport.sessionId) sessions.delete(transport.sessionId);
           };
-          const server = createMcpServer();
+          const server = createMcpServer(context);
           await server.connect(transport);
           await transport.handleRequest(req, res, body);
           return;
@@ -922,7 +983,7 @@ async function startHttpServer() {
       }
 
       if (req.method === "GET" || req.method === "DELETE") {
-        if (!sessionId || !transports.has(sessionId)) {
+        if (!sessionId || !sessions.has(sessionId)) {
           sendJson(res, 400, {
             jsonrpc: "2.0",
             error: { code: -32000, message: "Bad Request:缺失或无效的 mcp-session-id" },
@@ -930,24 +991,29 @@ async function startHttpServer() {
           });
           return;
         }
-        await transports.get(sessionId)!.handleRequest(req, res);
+        const session = sessions.get(sessionId)!;
+        assertSessionRequestActor(session.context, requestActor);
+        await session.transport.handleRequest(req, res);
         return;
       }
 
       sendJson(res, 405, { error: "Method Not Allowed" });
     } catch (e) {
       console.error("[mcp-server] HTTP 请求处理失败:", e);
-      if (!res.headersSent) sendJson(res, 500, { error: `Internal Server Error:${(e as Error).message}` });
+      if (!res.headersSent) {
+        const status = e instanceof AuthError ? 401 : e instanceof CrmError && e.status === 404 ? 401 : 500;
+        sendJson(res, status, { error: (e as Error).message });
+      }
     }
   });
 
   await new Promise<void>((resolve) => httpServer.listen(MCP_PORT, MCP_HOST, resolve));
   // 预建一份只为初始化 toolCount,使首个 session 建立前 /health 也能返回正确工具数
-  if (toolCount === 0) createMcpServer();
+  if (toolCount === 0) createMcpServer({ mode: "jwt", actor: null });
   console.error(
     `[mcp-server] pharma-crm MCP server 已启动(Streamable HTTP,${toolCount} 个工具),` +
       `endpoint=http://${MCP_HOST}:${MCP_PORT}/mcp,health=http://${MCP_HOST}:${MCP_PORT}/health,` +
-      `鉴权=${MCP_AUTH_TOKEN ? "Bearer(已启用)" : "未启用(本地开发)"},CRM=${BASE_URL}`,
+      `鉴权=WorkBuddy JWT(HS256),CRM=${BASE_URL}`,
   );
 }
 
@@ -958,7 +1024,7 @@ async function main() {
     await startHttpServer();
     return;
   }
-  const server = createMcpServer();
+  const server = createMcpServer({ mode: "stdio", actor: currentEmployee });
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(`[mcp-server] pharma-crm MCP server 已启动(stdio,${toolCount} 个工具),CRM=${BASE_URL}`);
