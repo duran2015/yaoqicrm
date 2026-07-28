@@ -83,7 +83,7 @@ try {
 
   const healthResponse = await fetch(`${MCP_URL}/health`);
   const health = await healthResponse.json();
-  if (!healthResponse.ok || health.ok !== true || health.tools !== 27) {
+  if (!healthResponse.ok || health.ok !== true || health.tools !== 30) {
     throw new Error(`健康检查异常：${JSON.stringify(health)}`);
   }
 

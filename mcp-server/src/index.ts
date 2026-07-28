@@ -864,7 +864,91 @@ tool(
     ),
 );
 
-// 28. complete_hcp_visit ------------------------------------------------------
+// 28. search_sales_intelligence ----------------------------------------------
+tool(
+  "search_sales_intelligence",
+  {
+    title: "检索销售情报与共享知识",
+    description:
+      "按自然语言检索行业政策、竞品动态、行业新闻、疾病知识和产品知识。默认只返回已核验内容;每条结果带来源、时间和核验状态。",
+    inputSchema: {
+      query: z.string().min(1).describe("检索问题或关键词,如「奥希替尼最近医保政策和竞品变化」"),
+      types: z.array(z.enum(["POLICY", "COMPETITOR", "INDUSTRY_NEWS", "DISEASE_KNOWLEDGE", "PRODUCT_KNOWLEDGE"])).optional(),
+      productId: z.string().optional().describe("限定 CRM 产品 id"),
+      includePending: z.boolean().optional().default(false).describe("是否包含待核验线索;包含时不得作为确定性结论"),
+      limit: z.number().int().min(1).max(20).optional().default(10),
+    },
+  },
+  async ({ query, types, productId, includePending, limit }) =>
+    callTool(() =>
+      crmFetch("/api/agent/sales-intelligence/search", {
+        query: {
+          employeeId: requireEmployee(context),
+          query,
+          types: types?.join(","),
+          productId,
+          includePending: String(includePending ?? false),
+          limit: limit ?? 10,
+        },
+      }),
+    ),
+);
+
+// 29. get_product_battlecard --------------------------------------------------
+tool(
+  "get_product_battlecard",
+  {
+    title: "生成产品拜访应对卡",
+    description:
+      "组合产品、已核验政策、竞品动态、共享知识、准备问题和当前有效批准资料。内部参考与可对外使用材料分开展示并附来源。",
+    inputSchema: {
+      productId: z.string().describe("CRM 产品 id,可由 list_products 获得"),
+      hcpId: z.string().optional().describe("可选 HCP id,保留用于客户场景说明"),
+      asOf: z.string().optional().describe("材料有效性基准日 YYYY-MM-DD"),
+    },
+  },
+  async ({ productId, hcpId, asOf }) =>
+    callTool(() =>
+      crmFetch("/api/agent/product-battlecard", {
+        query: {
+          employeeId: requireEmployee(context),
+          productId,
+          hcpId,
+          asOf,
+        },
+      }),
+    ),
+);
+
+// 30. refresh_product_intelligence -------------------------------------------
+tool(
+  "refresh_product_intelligence",
+  {
+    title: "确认并更新产品情报",
+    description:
+      "在用户明确确认后触发指定产品的互联网补充采集。返回采集任务和统计;相同幂等键重试不会重复创建任务。",
+    inputSchema: {
+      productId: z.string().describe("要更新的 CRM 产品 id"),
+      confirmed: z.boolean().describe("只有用户明确确认触发互联网采集后才能传 true"),
+      idempotencyKey: z.string().min(8).max(128).describe("稳定业务幂等键;网络重试必须复用"),
+    },
+  },
+  async ({ productId, confirmed, idempotencyKey }) =>
+    callTool(() => {
+      if (!confirmed) throw new CrmError(400, "必须取得用户明确确认后才能更新产品情报");
+      return crmFetch("/api/agent/refresh-intelligence", {
+        method: "POST",
+        body: {
+          productId,
+          employeeId: requireEmployee(context),
+          confirmed: true,
+          idempotencyKey,
+        },
+      });
+    }),
+);
+
+// 31. complete_hcp_visit ------------------------------------------------------
 tool(
   "complete_hcp_visit",
   {
