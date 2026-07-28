@@ -1,0 +1,24 @@
+{
+  "name": "pharma-crm-mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "药企销售代表 CRM 的 MCP(Model Context Protocol)Server —— 通过 stdio 让外部 AI 助手操作 CRM",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "start:http": "tsx src/index.ts --http",
+    "start:built": "node dist/index.js",
+    "start:built:http": "node dist/index.js --http"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.23.1",
+    "typescript": "^5"
+  }
+}

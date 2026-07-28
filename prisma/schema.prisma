@@ -1,0 +1,440 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 销售组织:医药代表→地区经理→大区经理
+model Employee {
+  id                 String               @id @default(cuid())
+  employeeCode       String               @unique // 工号,如 "YG1001"
+  name               String
+  role               String // MR | ASM | RSM | ADMIN
+  division           String // 事业部,如 "肿瘤线" | "心血管线"
+  phone              String?
+  reportsToId        String?
+  reportsTo          Employee?            @relation("OrgTree", fields: [reportsToId], references: [id])
+  subordinates       Employee[]           @relation("OrgTree")
+  territoryId        String?
+  territory          Territory?           @relation(fields: [territoryId], references: [id])
+  departmentId       String?
+  department         Department?          @relation(fields: [departmentId], references: [id])
+  visits             Visit[]
+  receivedVisits     Visit[]              @relation("VisitReceiver")
+  evaluatedVisits    Visit[]              @relation("VisitEvaluator")
+  checkins           CheckIn[]
+  tourPlans          TourPlan[]
+  sampleTransactions SampleTransaction[]
+  targets            Target[]
+  assignments        CustomerAssignment[]
+  kaHcos             Hco[]                @relation("KaOwner")
+}
+
+// 五级部门树(行政组织,独立于 Territory 辖区):
+// 1=事业部 → 2=战区 → 3=分管区 → 4=区 → 5=办事处
+model Department {
+  id        String       @id @default(cuid())
+  name      String
+  level     Int // 1=事业部 2=战区 3=分管区 4=区 5=办事处
+  parentId  String?
+  parent    Department?  @relation("DeptTree", fields: [parentId], references: [id])
+  children  Department[] @relation("DeptTree")
+  employees Employee[]
+}
+
+// 辖区树:大区→地区→办事处
+model Territory {
+  id        String      @id @default(cuid())
+  name      String
+  level     String // ZONE | REGION | AREA
+  parentId  String?
+  parent    Territory?  @relation("TerritoryTree", fields: [parentId], references: [id])
+  children  Territory[] @relation("TerritoryTree")
+  employees Employee[]
+  hcos      Hco[]
+}
+
+// 医疗机构(医院/药店/商业公司)
+model Hco {
+  id          String     @id @default(cuid())
+  code        String?    @unique // 医院编码,如 "HOS001"
+  name        String
+  type        String // HOSPITAL | PHARMACY | DISTRIBUTOR
+  level       String? // 三级甲等 | 三级乙等 | 二级甲等 ...
+  address     String?
+  territoryId String?
+  territory   Territory? @relation(fields: [territoryId], references: [id])
+
+  // ---- 基础信息(对齐客融CRM HCO 详情页)----
+  creditCode         String? // 统一社会信用代码
+  province           String?
+  city               String?
+  district           String?
+  otherNames         String? // 曾用名/别名
+  businessStatus     String? // 正常 | 注销 | 未知
+  phone              String?
+  businessAddress    String? // 工商注册地址
+  category           String? // 客户分类:目标医院 | 潜力医院 | 观察医院
+  // ---- 工商信息 ----
+  regCapital         String? // 注册资本
+  foundedDate        String? // 成立日期
+  legalPerson        String? // 法定代表人
+  businessScope      String? // 经营范围
+  website            String?
+  introduction       String? // 机构简介
+  // ---- 机构信息 ----
+  hospitalNature     String? // 公立 | 民营
+  institutionType    String? // 综合医院 | 专科医院 | 中医医院
+  isMilitary         String? // 是否军队医院:是 | 否
+  isInsurance        String? // 是否医保定点
+  isClinicalTrial    String? // 是否临床试验机构
+  isHeadquarters     String? // 是否总部
+  teachingType       String? // 教学医院类型
+  diagnosisSubjects  String? // 诊疗科目(长文本)
+  icuBeds            Int?
+  openBeds           Int?
+  approvedBeds       Int?
+  // ---- 管理信息 ----
+  doctorCount        Int?
+  annualDrugPurchase Float? // 年药品采购额(万元)
+  annualRevenue      Float? // 年收入(万元)
+  dailyOutpatient    Int? // 日门诊量
+  annualSurgeries    Int? // 年手术量
+  annualAdmissions   Int? // 年住院量
+  diseaseAreas       String? // 优势病种
+  drugRatio          Float? // 药占比(%)
+  // ---- 合作信息 ----
+  isStrategic        String? // 是否战略客户:是 | 否
+  cooperationStatus  String? // 合作 | 暂停 | 终止
+  tier               String? // A | B | C | D,null=未分级
+  kaOwnerId          String? // KA 负责人
+  kaOwner            Employee? @relation("KaOwner", fields: [kaOwnerId], references: [id])
+
+  hcps             Hcp[]
+  visits           Visit[]
+  departments      HcoDepartment[]
+  hospitalProducts HcoProduct[]
+  examResults      HcoExamResult[]
+  assignments      CustomerAssignment[]
+  tierHistories    CustomerTierHistory[]
+}
+
+// 医生 HCP
+model Hcp {
+  id        String  @id @default(cuid())
+  code      String? @unique // 客户编码,如 "DR0001"
+  name      String
+  title     String? // 主任医师 | 副主任医师 | 主治医师 | 住院医师
+  specialty String? // 科室,如 肿瘤内科
+  tier      String? // A | B | C | D 分级,null=未分级
+  hcoId     String?
+  hco       Hco?    @relation(fields: [hcoId], references: [id])
+  phone     String?
+  wechat    String?
+  tags      String? // 逗号分隔,如 "KOL,肺癌领域"
+  notes     String?
+
+  // ---- 基础信息(对齐客融CRM HCP 详情页)----
+  gender              String? // 男 | 女
+  birthday            String? // 出生日期
+  licenseNo           String? // 医师资格证号
+  // ---- 工作信息 ----
+  adminDuty           String? // 行政职务,如 科主任
+  academicTitle       String? // 学术职称,如 教授
+  doctorLevel         String? // 医生等级,如 主任医师
+  isMultiPractice     String? // 是否多点执业:是 | 否
+  onlineConsult       String? // 是否开通网络问诊
+  isClinicalPI        String? // 是否临床 PI
+  isGroupLeader       String? // 是否组长
+  isPharmacyCommittee String? // 是否药事会成员
+  practiceScope       String? // 执业范围
+  weeklyOutpatient    Int? // 周门诊量
+  managedBeds         Int? // 管理床位数
+  expertise           String? // 擅长疾病
+  practiceCertNo      String? // 执业证书编号
+  titleCertNo         String? // 职称证书编号
+  // ---- 其他信息 ----
+  email               String?
+  hometown            String? // 籍贯
+  hobbies             String? // 兴趣爱好
+  personalityTags     String? // 性格标签
+  homeAddress         String? // 家庭住址
+  // ---- 证件信息 ----
+  idType              String? // 证件类型:身份证等
+  idNumber            String? // 证件号码(API 层脱敏)
+
+  visits             Visit[]
+  sampleTransactions SampleTransaction[]
+  eventAttendances   EventAttendance[]
+  tourPlanItems      TourPlanItem[]
+  educations         HcpEducation[]
+  bankAccounts       HcpBankAccount[]
+  assignments        CustomerAssignment[]
+  tierHistories      CustomerTierHistory[]
+}
+
+// 产品主数据:品牌→分子→治疗领域
+model Product {
+  id                  String         @id @default(cuid())
+  brand               String // 商品名
+  molecule            String // 通用名/分子
+  therapeuticCategory String // 治疗领域
+  division            String // 所属事业部
+  price               Float?
+  unit                String? // 规格,如 "10mg*30片/盒"
+  visitProducts       VisitProduct[]
+  sampleLots          SampleLot[]
+  targets             Target[]
+  hcoProducts         HcoProduct[]
+}
+
+// 拜访记录 DCR(最核心事实表)
+model Visit {
+  id             String              @id @default(cuid())
+  employeeId     String
+  employee       Employee            @relation(fields: [employeeId], references: [id])
+  hcpId          String?
+  hcp            Hcp?                @relation(fields: [hcpId], references: [id])
+  hcoId          String?
+  hco            Hco?                @relation(fields: [hcoId], references: [id])
+  visitDate      DateTime
+  type           String // FACE_TO_FACE | PHONE | CONFERENCE | JOINT(协同拜访)
+  purpose        String? // 拜访目的(旧自由文本字段,向后兼容保留)
+  purposes       String? // 结构化拜访目的,逗号分隔多选:产品信息传递|临床信息沟通|市场现状调研|学术会议沟通|其他
+  outcome        String? // 结果,如 "同意试用" | "需进一步跟进"
+  duration       Int? // 分钟
+  notes          String? // 原始记录(语音速记/文字)
+  summary        String? // 人工拜访总结(与 aiSummary 并存,真实导出数据为两个独立字段)
+  nextStep       String? // 下一步计划
+  aiSummary      String? // AI 富化:摘要(预留给 AI 工具写)
+  aiSentiment    String? // AI 富化:情感倾向 POSITIVE|NEUTRAL|NEGATIVE
+  source         String              @default("MANUAL") // 数据来源:MANUAL | AI | IMPORT
+  receiverId     String? // 报告接收人(上级),默认=填写人的直属上级
+  receiver       Employee?           @relation("VisitReceiver", fields: [receiverId], references: [id])
+  // 有效性评定(经理对接收到的拜访做有效/无效反馈)
+  validityStatus String              @default("PENDING") // PENDING=未反馈 | VALID=有效 | INVALID=无效
+  evaluatedById  String?
+  evaluatedBy    Employee?           @relation("VisitEvaluator", fields: [evaluatedById], references: [id])
+  evaluatedAt    DateTime?
+  invalidReason  String? // 无效原因:重复 | 内容过短 | 签到地点不对 | 结果未体现 …
+  jointWithId    String? // 协同拜访的同事
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  products       VisitProduct[]
+  samples        SampleTransaction[]
+  checkins       CheckIn[]
+}
+
+// 拜访签到(真实导出数据每条拜访绑定一条签到)
+model CheckIn {
+  id           String   @id @default(cuid())
+  visitId      String
+  visit        Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id])
+  checkinTime  DateTime
+  locationName String? // 签到地点名称
+  latitude     Float?
+  longitude    Float?
+  status       String   @default("NORMAL") // NORMAL | LOCATION_MISMATCH(签到地点不对)
+}
+
+model VisitProduct {
+  id        String  @id @default(cuid())
+  visitId   String
+  visit     Visit   @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  feedback  String? // 医生对该产品的反馈
+}
+
+// 周拜访计划 + 经理审批
+model TourPlan {
+  id           String         @id @default(cuid())
+  employeeId   String
+  employee     Employee       @relation(fields: [employeeId], references: [id])
+  weekStart    DateTime
+  status       String         @default("DRAFT") // DRAFT | SUBMITTED | APPROVED | REJECTED
+  approverId   String?
+  approvedAt   DateTime?
+  rejectReason String?
+  items        TourPlanItem[]
+}
+
+model TourPlanItem {
+  id         String   @id @default(cuid())
+  tourPlanId String
+  tourPlan   TourPlan @relation(fields: [tourPlanId], references: [id], onDelete: Cascade)
+  planDate   DateTime
+  hcpId      String?
+  hcp        Hcp?     @relation(fields: [hcpId], references: [id])
+  hcoName    String? // 或自由文本机构
+  note       String?
+}
+
+// 样品批次
+model SampleLot {
+  id           String              @id @default(cuid())
+  productId    String
+  product      Product             @relation(fields: [productId], references: [id])
+  lotNumber    String
+  expiryDate   DateTime
+  totalQty     Int // 该批次总量
+  transactions SampleTransaction[]
+}
+
+// 样品发放事务(代表库存由发放/领用事务推导)
+model SampleTransaction {
+  id         String    @id @default(cuid())
+  lotId      String
+  lot        SampleLot @relation(fields: [lotId], references: [id])
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+  hcpId      String?
+  hcp        Hcp?      @relation(fields: [hcpId], references: [id])
+  visitId    String?
+  visit      Visit?    @relation(fields: [visitId], references: [id])
+  quantity   Int // 正数=数量,方向由 type 区分
+  type       String // RECEIVE(代表领用) | DISTRIBUTE(发放给医生)
+  transDate  DateTime  @default(now())
+}
+
+// 医学会议
+model MedEvent {
+  id        String            @id @default(cuid())
+  name      String
+  type      String // 科室会 | 城市会 | 学术研讨会 | 卫星会
+  eventDate DateTime
+  location  String?
+  budget    Float?
+  attendees EventAttendance[]
+}
+
+model EventAttendance {
+  id      String   @id @default(cuid())
+  eventId String
+  event   MedEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  hcpId   String
+  hcp     Hcp      @relation(fields: [hcpId], references: [id])
+}
+
+// 销售指标
+model Target {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  period      String // 如 "2026-07"
+  visitTarget Int // 拜访次数目标
+  salesTarget Float? // 销售金额目标(元)
+}
+
+// ==================== 客融CRM 档案体系扩展(第三阶段) ====================
+
+// HCP 教育经历(多条)
+model HcpEducation {
+  id        String  @id @default(cuid())
+  hcpId     String
+  hcp       Hcp     @relation(fields: [hcpId], references: [id], onDelete: Cascade)
+  school    String? // 毕业院校
+  major     String? // 专业
+  mentor    String? // 导师
+  gradDate  String? // 毕业时间
+  degree    String? // 学位:博士 | 硕士 | 学士
+  education String? // 学历:研究生 | 本科 ...
+}
+
+// HCP 银行账户(accountNo 存原文,API 层脱敏)
+model HcpBankAccount {
+  id          String  @id @default(cuid())
+  hcpId       String
+  hcp         Hcp     @relation(fields: [hcpId], references: [id], onDelete: Cascade)
+  accountName String? // 户名
+  bankName    String? // 开户行
+  accountNo   String? // 账号(存原文,API 返回时脱敏)
+  accountType String? // 账户类型:借记卡 | 存折 ...
+  isDefault   Boolean @default(false)
+}
+
+// HCO 科室档案
+model HcoDepartment {
+  id           String  @id @default(cuid())
+  hcoId        String
+  hco          Hco     @relation(fields: [hcoId], references: [id], onDelete: Cascade)
+  name         String // 科室名称
+  standardName String? // 标准科室
+  feature      String? // 科室特色
+  ranking      String? // 科室排名
+  overview     String? // 科室概况
+}
+
+// HCO 进院产品 / 客户池产品
+model HcoProduct {
+  id        String  @id @default(cuid())
+  hcoId     String
+  hco       Hco     @relation(fields: [hcoId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  status    String // ENTERED=已进院 | POOL=客户池
+}
+
+// HCO 国考成绩(国家三级公立医院绩效考核)
+model HcoExamResult {
+  id    String @id @default(cuid())
+  hcoId String
+  hco   Hco    @relation(fields: [hcoId], references: [id], onDelete: Cascade)
+  year  Int
+  grade String // A++ | A+ | A | B++ ...
+  score Float?
+  rank  Int?
+}
+
+// 客户分级变更历史(HCP / HCO 二选一)
+model CustomerTierHistory {
+  id          String   @id @default(cuid())
+  hcpId       String?
+  hcp         Hcp?     @relation(fields: [hcpId], references: [id], onDelete: Cascade)
+  hcoId       String?
+  hco         Hco?     @relation(fields: [hcoId], references: [id], onDelete: Cascade)
+  fromTier    String? // 原分级(null=未分级)
+  toTier      String // 新分级 A | B | C | D
+  changedById String // 操作人员工 id
+  reason      String?
+  changedAt   DateTime @default(now())
+}
+
+// 客户-代表多对多分配(截图"合作办事处/合作代表"多值)
+model CustomerAssignment {
+  id         String   @id @default(cuid())
+  hcpId      String?
+  hcp        Hcp?     @relation(fields: [hcpId], references: [id], onDelete: Cascade)
+  hcoId      String?
+  hco        Hco?     @relation(fields: [hcoId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  role       String   @default("OWNER") // OWNER=负责 | COLLAB=协作
+  createdAt  DateTime @default(now())
+}
+
+// 建档审批工作流(暂存草稿 / 立即创建 + 管理端审核 + 客户核决)
+model CustomerApplication {
+  id           String    @id @default(cuid())
+  type         String // HCP_CREATE | HCO_CREATE | HCP_MODIFY | HCO_MODIFY
+  payload      String // 表单 JSON 字符串
+  status       String    @default("DRAFT") // DRAFT | PENDING | APPROVED | REJECTED
+  applicantId  String // 申请人员工 id
+  reviewerId   String?
+  reviewedAt   DateTime?
+  rejectReason String?
+  targetHcpId  String? // MODIFY 时的目标档案
+  targetHcoId  String?
+  createdHcpId String? // APPROVE 后落地的档案 id
+  createdHcoId String?
+  pool         String? // 客户池:架构客户池 | 业绩客户池
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
