@@ -22,6 +22,7 @@ import type { DashboardData, ListResponse, Visit } from "@/lib/types";
 import { fmtDateShort, fmtDateTime, fmtPercent } from "@/lib/utils";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, Skeleton, TierBadge } from "@/components/ui";
 import { SalesSummary } from "@/components/sales-summary";
+import { RepresentativeWorkbench } from "@/components/representative-workbench";
 
 const TIER_COLORS: Record<string, string> = { A: "#ef4444", B: "#3b82f6", C: "#94a3b8", D: "#cbd5e1", 未分级: "#e2e8f0" };
 
@@ -97,6 +98,7 @@ export default function DashboardPage() {
 
       {!loading && !error && data && (
         <div className="space-y-5">
+          {current.role === "MR" && <RepresentativeWorkbench employeeId={current.id} asOf={AS_OF} />}
           <SalesSummary employee={current} title={data.scope.isManager ? "7 月团队销售结果" : "7 月我的销售结果"} />
           {/* KPI 卡片 */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
