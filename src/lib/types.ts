@@ -77,12 +77,35 @@ export interface Product {
   price?: number | null;
   unit?: string | null;
   sampleLots?: SampleLot[];
+  materials?: ProductMaterial[];
+}
+
+export interface ProductMaterial {
+  id: string;
+  productId: string;
+  title: string;
+  type: string;
+  messageSummary: string;
+  externalUrl: string;
+  version: string;
+  approvalCode?: string | null;
+  effectiveDate: string;
+  expiryDate: string;
+  status: string;
 }
 
 export interface VisitProductItem {
   id: string;
   feedback?: string | null;
   product: { id: string; brand: string; molecule: string };
+}
+
+export interface VisitMaterialUsage {
+  id: string;
+  titleSnapshot: string;
+  versionSnapshot: string;
+  approvalCodeSnapshot: string;
+  material: { productId: string; externalUrl: string };
 }
 
 export interface VisitSampleItem {
@@ -125,6 +148,7 @@ export interface Visit {
   hcp?: { id: string; code?: string | null; name: string; title?: string | null; tier?: string; hco?: { id: string; name: string } | null } | null;
   hco?: { id: string; code?: string | null; name: string } | null;
   products: VisitProductItem[];
+  materialUsages?: VisitMaterialUsage[];
   samples: VisitSampleItem[];
   checkins?: CheckIn[];
 }

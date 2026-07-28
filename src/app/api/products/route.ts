@@ -20,7 +20,10 @@ export async function GET(req: NextRequest) {
 
   const products = await prisma.product.findMany({
     where,
-    include: { sampleLots: { select: { id: true, lotNumber: true, expiryDate: true, totalQty: true } } },
+    include: {
+      sampleLots: { select: { id: true, lotNumber: true, expiryDate: true, totalQty: true } },
+      materials: { orderBy: { effectiveDate: "desc" } },
+    },
     orderBy: [{ division: "asc" }, { brand: "asc" }],
   });
   return NextResponse.json({ data: products, total: products.length });
