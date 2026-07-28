@@ -150,5 +150,3 @@ export async function POST(req: NextRequest) {
   });
   return NextResponse.json({ ...completed, replayed: false }, { status: 201 });
 }
-
-export { collectionInput };

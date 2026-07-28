@@ -37,5 +37,3 @@ export async function POST(req: NextRequest) {
   if (!input) return err("来源配置不合法");
   return NextResponse.json(await prisma.intelligenceSource.create({ data: input }), { status: 201 });
 }
-
-export { parseSource };
