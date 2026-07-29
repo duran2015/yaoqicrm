@@ -48,7 +48,13 @@ export function evaluateBattlecardResult(data: unknown) {
   const groups = ["verifiedFacts", "pendingLeads", "approvedMaterials"].every((key) => Array.isArray(card?.[key]));
   const facts = (card?.verifiedFacts ?? []) as Record<string, unknown>[];
   const materials = (card?.approvedMaterials ?? []) as Record<string, unknown>[];
-  const citations = facts.every((item) => /^https?:\/\//.test(String(item.sourceUrl ?? "")))
+  const citationRows = (card?.citations ?? []) as Record<string, unknown>[];
+  const citations = facts.every((item) => {
+    if (/^https?:\/\//.test(String(item.sourceUrl ?? ""))) return true;
+    const citationId = String(item.citationId ?? item.intelligenceId ?? "");
+    return citationRows.some((citation) =>
+      String(citation.intelligenceId ?? "") === citationId && /^https?:\/\//.test(String(citation.sourceUrl ?? "")));
+  })
     && materials.every((item) => /^https?:\/\//.test(String(item.externalUrl ?? "")));
   return [
     assertion("battlecard.product", "返回产品身份", Boolean(product?.name || product?.brand), "包含产品名称", String(product?.name ?? product?.brand ?? "缺失")),

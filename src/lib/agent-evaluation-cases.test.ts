@@ -29,9 +29,10 @@ test("search results require bounded source-traceable records", () => {
 test("battlecard keeps verified facts leads and approved materials separate", () => {
   const assertions = evaluateBattlecardResult({
     product: { name: "天韵" },
-    verifiedFacts: [{ sourceUrl: "https://example.cn/fact" }],
+    verifiedFacts: [{ intelligenceId: "intel-1", citationId: "intel-1" }],
     pendingLeads: [],
     approvedMaterials: [{ externalUrl: "https://example.cn/material" }],
+    citations: [{ intelligenceId: "intel-1", sourceUrl: "https://example.cn/fact" }],
   });
   assert.equal(assertions.every((item) => item.passed), true);
 });
