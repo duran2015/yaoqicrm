@@ -150,6 +150,7 @@ function Sidebar() {
               <NavLink href="/applications/review" label="建档审核" icon="🗂️" pathname={pathname} />
               <NavLink href="/manager" label="经理工作台" icon="🎯" pathname={pathname} />
               <NavLink href="/evaluations" label="拜访评定" icon="✅" pathname={pathname} />
+              <NavLink href="/agent-evaluations" label="Agent 评测" icon="🧪" pathname={pathname} />
               <NavLink href="/team" label="团队" icon="👥" pathname={pathname} />
             </>
           )}
