@@ -754,6 +754,80 @@ model McpOperation {
   @@index([employeeId, status, createdAt])
 }
 
+model AgentEvaluationCase {
+  id          String                  @id @default(cuid())
+  key         String                  @unique
+  name        String
+  capability  String
+  description String
+  toolName    String?
+  inputJson   String
+  required    Boolean                 @default(true)
+  enabled     Boolean                 @default(true)
+  sortOrder   Int                     @default(0)
+  results     AgentEvaluationResult[]
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([enabled, sortOrder])
+}
+
+model AgentEvaluationRun {
+  id                       String                  @id @default(cuid())
+  status                   String                  @default("RUNNING")
+  scope                    String                  @default("ALL")
+  mcpEndpoint              String
+  startedByEmployeeId      String
+  startedAt                DateTime                @default(now())
+  completedAt              DateTime?
+  caseCount                Int                     @default(0)
+  passedCaseCount          Int                     @default(0)
+  assertionCount           Int                     @default(0)
+  passedAssertionCount     Int                     @default(0)
+  averageLatencyMs         Int?
+  errorMessage             String?
+  results                  AgentEvaluationResult[]
+
+  @@index([status, startedAt])
+}
+
+model AgentEvaluationResult {
+  id              String                     @id @default(cuid())
+  runId           String
+  run             AgentEvaluationRun         @relation(fields: [runId], references: [id], onDelete: Cascade)
+  caseId          String
+  case            AgentEvaluationCase        @relation(fields: [caseId], references: [id])
+  caseKey         String
+  caseName        String
+  capability      String
+  status          String
+  latencyMs       Int?
+  httpStatus      Int?
+  requestSummary  String
+  responseSummary String?
+  errorMessage    String?
+  startedAt       DateTime                   @default(now())
+  completedAt     DateTime?
+  assertions      AgentEvaluationAssertion[]
+
+  @@index([runId, status])
+  @@index([caseKey, startedAt])
+}
+
+model AgentEvaluationAssertion {
+  id       String                @id @default(cuid())
+  resultId String
+  result   AgentEvaluationResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  key      String
+  label    String
+  required Boolean               @default(true)
+  passed   Boolean
+  expected String
+  actual   String
+
+  @@index([resultId, passed])
+}
+
 // 自动采集来源配置；configJson 只保存公开适配参数，不保存密钥
 model IntelligenceSource {
   id              String              @id @default(cuid())
