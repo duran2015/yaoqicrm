@@ -47,3 +47,12 @@ Agent 必须先取得用户确认，再调用 `refresh_product_intelligence`。�
 - 产品刷新留下 `McpOperation` 和 `CollectionRun`；
 - 采集失败不影响既有数据和其他来源；
 - 拜访完成继续使用原有 `complete_hcp_visit` 闭环。
+
+## Agent/MCP 自动评测
+
+1. 服务端配置 `AGENT_EVAL_MCP_ENDPOINT` 和 `AGENT_EVAL_JWT_SECRET`；签发方和受众默认沿用 WorkBuddy MCP 配置。
+2. 在 CRM 切换至 ASM、RSM 或 ADMIN，打开 `/pharma/agent-evaluations`。
+3. 点击“运行全部评测”。系统串行运行 9 个固定场景，不调用外部大模型。
+4. 展开场景查看每条断言的期望、实际、延迟和引用完整性。
+5. 失败断言不会阻断后续场景；可以从场景详情单独重跑。
+6. 评测快照只保存员工、角色和脱敏摘要，不保存 JWT、密钥或 MCP session。

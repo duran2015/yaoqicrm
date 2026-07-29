@@ -47,6 +47,10 @@ function genPurposes(): string[] {
 
 async function main() {
   console.log("清空旧数据...");
+  await prisma.agentEvaluationAssertion.deleteMany();
+  await prisma.agentEvaluationResult.deleteMany();
+  await prisma.agentEvaluationRun.deleteMany();
+  await prisma.agentEvaluationCase.deleteMany();
   await prisma.intelligenceUsage.deleteMany();
   await prisma.intelligenceCompetitor.deleteMany();
   await prisma.intelligenceTherapeuticArea.deleteMany();
@@ -1025,12 +1029,30 @@ async function main() {
     });
   }
 
+  const evaluationCases = [
+    ["protocol.initialize", "MCP 初始化", "PROTOCOL"],
+    ["protocol.tools-list", "工具发现", "PROTOCOL"],
+    ["identity.missing-jwt", "缺少 JWT", "IDENTITY"],
+    ["identity.expired-jwt", "过期 JWT", "IDENTITY"],
+    ["identity.employee-mismatch", "员工映射不一致", "IDENTITY"],
+    ["intelligence.search", "销售情报搜索", "INTELLIGENCE_SEARCH"],
+    ["battlecard.product", "产品战卡", "PRODUCT_BATTLECARD"],
+    ["refresh.confirmation", "刷新确认保护", "INTELLIGENCE_REFRESH"],
+    ["refresh.idempotency", "刷新幂等与审计", "INTELLIGENCE_REFRESH"],
+  ];
+  for (const [sortOrder, [key, name, capability]] of evaluationCases.entries()) {
+    await prisma.agentEvaluationCase.create({
+      data: { key, name, capability, description: `确定性验证：${name}`, toolName: key.split(".")[0], inputJson: "{}", sortOrder },
+    });
+  }
+
   console.log("✅ 种子数据完成:");
   console.log(`  员工 ${await prisma.employee.count()},部门 ${await prisma.department.count()},辖区 ${await prisma.territory.count()},机构 ${await prisma.hco.count()}`);
   console.log(`  HCP ${await prisma.hcp.count()},产品 ${await prisma.product.count()},批准资料 ${await prisma.productMaterial.count()},批次 ${await prisma.sampleLot.count()}`);
   console.log(`  拜访 ${visitCount}(有效 ${validCount} / 无效 ${invalidCount} / 待评定 ${pendingCount}),签到 ${await prisma.checkIn.count()}(地点异常 ${mismatchCount})`);
   console.log(`  样品事务 ${await prisma.sampleTransaction.count()},周计划 ${await prisma.tourPlan.count()},月度计划 ${await prisma.cyclePlan.count()},客户策略 ${await prisma.accountPlan.count()},销售结果 ${await prisma.salesResult.count()},会议 ${await prisma.medEvent.count()},指标 ${await prisma.target.count()}`);
   console.log(`  销售情报 ${await prisma.salesIntelligence.count()},情报来源 ${await prisma.intelligenceSource.count()},竞品 ${await prisma.competitorProduct.count()}`);
+  console.log(`  Agent/MCP 评测用例 ${await prisma.agentEvaluationCase.count()}`);
 }
 
 main()

@@ -20,6 +20,17 @@ export async function GET() {
   return NextResponse.json({
     latest, capabilities, failures,
     recentPassRate: runs.length ? Math.round(runs.filter((run) => run.status === "PASSED").length / runs.length * 100) : 0,
-    runs: runs.map(({ results: _results, ...run }) => run),
+    runs: runs.map((run) => ({
+      id: run.id,
+      status: run.status,
+      scope: run.scope,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      caseCount: run.caseCount,
+      passedCaseCount: run.passedCaseCount,
+      assertionCount: run.assertionCount,
+      passedAssertionCount: run.passedAssertionCount,
+      averageLatencyMs: run.averageLatencyMs,
+    })),
   });
 }
