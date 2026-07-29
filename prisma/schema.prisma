@@ -754,6 +754,25 @@ model McpOperation {
   @@index([employeeId, status, createdAt])
 }
 
+model McpServiceToken {
+  id                    String    @id @default(cuid())
+  name                  String
+  tokenPrefix           String    @default("phmcp_live_")
+  tokenHint             String
+  tokenHash             String    @unique
+  employeeId            String
+  status                String    @default("ACTIVE")
+  expiresAt             DateTime?
+  lastUsedAt            DateTime?
+  lastUsedIp            String?
+  createdByEmployeeId   String
+  createdAt             DateTime  @default(now())
+  revokedAt             DateTime?
+  revokedByEmployeeId   String?
+
+  @@index([status, createdAt])
+}
+
 model AgentEvaluationCase {
   id          String                  @id @default(cuid())
   key         String                  @unique

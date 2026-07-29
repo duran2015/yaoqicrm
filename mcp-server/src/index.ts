@@ -1070,6 +1070,7 @@ const MCP_HOST = process.env.MCP_HOST ?? "0.0.0.0";
 const WORKBUDDY_JWT_SECRET = process.env.WORKBUDDY_JWT_SECRET;
 const WORKBUDDY_JWT_ISSUER = process.env.WORKBUDDY_JWT_ISSUER ?? "workbuddy-local";
 const WORKBUDDY_JWT_AUDIENCE = process.env.WORKBUDDY_JWT_AUDIENCE ?? "pharma-crm-mcp";
+const MCP_INTERNAL_AUTH_SECRET = process.env.MCP_INTERNAL_AUTH_SECRET;
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -1086,10 +1087,21 @@ function sendJson(res: ServerResponse, status: number, data: unknown) {
 }
 
 async function authenticateHttpRequest(req: IncomingMessage): Promise<SessionActor> {
+  const token = bearerToken(req.headers.authorization);
+  if (token.startsWith("phmcp_live_")) {
+    if (!MCP_INTERNAL_AUTH_SECRET) throw new AuthError("INVALID_CLAIMS", "缺少 MCP_INTERNAL_AUTH_SECRET");
+    const response = await fetch(`${BASE_URL}/api/internal/mcp-service-tokens/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-mcp-internal-secret": MCP_INTERNAL_AUTH_SECRET },
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) throw new AuthError("INVALID_SIGNATURE", "MCP Token 无效、过期或已撤销");
+    return (await response.json() as { actor: SessionActor }).actor;
+  }
   if (!WORKBUDDY_JWT_SECRET) {
     throw new AuthError("INVALID_CLAIMS", "MCP HTTP 模式缺少 WORKBUDDY_JWT_SECRET");
   }
-  const claims = verifyWorkBuddyJwt(bearerToken(req.headers.authorization), {
+  const claims = verifyWorkBuddyJwt(token, {
     secret: WORKBUDDY_JWT_SECRET,
     issuer: WORKBUDDY_JWT_ISSUER,
     audience: WORKBUDDY_JWT_AUDIENCE,
